@@ -19,6 +19,7 @@ class MultiThreadedServer(object):
             pthread = threading.Thread(target = self.thread_handler, args = (client,address))
             pthread.start()
     
+    #TODO This will be changed to desired handler key value
     def thread_handler(self, client, address):
         size = 1024
         data = client.recv(size)
