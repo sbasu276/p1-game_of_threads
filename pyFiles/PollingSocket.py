@@ -40,9 +40,9 @@ class PollingSocket:
 
   def poll_connection(self):
     while True:
-      events = self.sel.select(timeout=None)
+      events = self.sel.select(timeout=0)
       for key, mask in events:
-        if key.data is None:
-          self.accept(key.fileobj)
+        if key.data is None:  #empty data object if connection is not established already
+          self.accept_connection(key.fileobj)
         else:
           return self.service_connection(key, mask)
