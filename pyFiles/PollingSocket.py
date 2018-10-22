@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import socket, selectors,types
+import socket, selectors, types
 
 class PollingSocket:
 
@@ -12,36 +12,37 @@ class PollingSocket:
     self.sel = selectors.DefaultSelector()
     self.sel.register(sock, selectors.EVENT_READ, data=None)
 
-  def accept_wrapper(self, sock):
+  def accept_connection(self, sock):
     conn, addr = sock.accept()  # Should be ready to read
     print('accepted connection from', addr)
     conn.setblocking(False)
-    data = types.SimpleNamespace(addr=addr, inb=b'', outb=b'')
-    events = selectors.EVENT_READ | selectors.EVENT_WRITE
+    data = types.SimpleNamespace(addr=addr, req=b'', resp=b'')
+    events = selectors.EVENT_READ
     self.sel.register(conn, events, data=data)
 
   def service_connection(self, key, mask):
     sock = key.fileobj
     data = key.data
+    new_request_list = []
     if mask & selectors.EVENT_READ:
       recv_data = sock.recv(1024)  # Should be ready to read
       if recv_data:
-        data.outb += recv_data
-      else:
+        data.req += recv_data
+        if(data.req.decode().endswith('\n')):					#"\n" indicated end of request
+#          print("Received a request from :", data.addr, data.req)
+          new_request_list.append((sock, data.req))
+      else:																						#empty message is close request
         print('closing connection to', data.addr)
         self.sel.unregister(sock)
         sock.close()
-    if mask & selectors.EVENT_WRITE:
-      if data.outb:
-        print('echoing', repr(data.outb), 'to', data.addr)
-        sent = sock.send(data.outb)  # Should be ready to write
-        data.outb = data.outb[sent:]
+    return new_request_list
 
-  def test(self):
+
+  def poll_connection(self):
     while True:
       events = self.sel.select(timeout=None)
       for key, mask in events:
         if key.data is None:
-          self.accept_wrapper(key.fileobj)
+          self.accept(key.fileobj)
         else:
-          self.service_connection(key, mask)
+          return self.service_connection(key, mask)
