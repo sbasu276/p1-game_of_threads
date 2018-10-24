@@ -7,7 +7,7 @@
 //Array of function pointers
 void *signal_handler_map[MAXNUMSIGNALS] (int fd);
 
-int set_signal_handler(int signum, void* handler){
+void set_signal_handler(int signum, void* handler){
 
 	signal_handler_map[signum] = handler;
 
@@ -22,5 +22,6 @@ int set_signal_handler(int signum, void* handler){
 
 static void my_handler(int sig, siginfo_t *si, void *data) {
 	//Definition of this function is in python part
+	print("Received signal from FD %d", si->fd);
 	(*signal_handler_map[sig]) (si->fd);
 }
