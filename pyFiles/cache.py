@@ -39,7 +39,7 @@ class Cache:
             retval = value
         return retval
     
-    def insert(self, key, value):
+    def insert(self, key, value, dirty=True):
         """ Inserts an entry to cache
             Returns key, value if an eviction of dirty entry had to be made,
             else return (None, None)
@@ -53,7 +53,7 @@ class Cache:
                 elem = self.__pop()
                 if elem.dirty:
                     ret_key, ret_val = elem.key, elem.value
-            self.__insert(key, value)
+            self.__insert(key, value, dirty=dirty)
         return ret_key, ret_val
                 
     def evict(self):
@@ -67,6 +67,13 @@ class Cache:
             if elem.dirty:
                 ret_key, ret_val = elem.key, elem.value
         return ret_key, ret_val
+
+    def delete(self, key=None):
+        """ Deletes an entry from cache
+            By default deletes the last entry
+        """
+        position = self.__search(key)
+        return self.__pop(key, position)
 
     def __is_full(self):
         return (self.size >= self.limit)

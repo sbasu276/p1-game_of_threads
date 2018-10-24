@@ -1,13 +1,32 @@
-#!/usr/bin/env python3
+from time import sleep
+import sys
+import socket
 
-import socket, time
+class Client:
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-HOST = '127.0.0.1'  # The server's hostname or IP address
-PORT = 65432        # The port used by the server
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-  s.connect((HOST, PORT))
-  for i in range(1):
-    s.sendall(b'GET Roger\n')
-    data = s.recv(1024)
-    print('Received', repr(data))
-    time.sleep(1)
+    def send_data(self, message):
+        try:
+            self.sock.connect(server_address)
+            # Send data
+            self.sock.send(message)
+            print("Data sent")
+            data = self.sock.recv(1024)
+            print(data.decode('utf-8'))
+        finally:
+            self.sock.close()
+
+if __name__ == "__main__":
+    # Connect the socket to the port where the server is listening
+    port = int(sys.argv[1])
+    server_address = ('localhost', port)
+
+    client = Client(server_address, port)
+    client.send_data("GET Makesh\n".encode('utf-8'))
+    #client.send_data("PUT Soumen Basu\n".encode('utf-8'))
+    #client.send_data("INSERT Makesh Chandran\n".encode('utf-8'))
+    #client.send_data("PUT Vivek Bhasi\n".encode('utf-8'))
+
