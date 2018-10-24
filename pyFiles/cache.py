@@ -1,68 +1,109 @@
-import threading
+class CacheElement:
+    def __init__(self, key, value, dirty=False):
+        self.key = key
+        self.value = value
+        self.dirty = dirty
 
 class Cache:
     def __init__(self, size):
         """ Initialize the Cache
         """
         self.limit = size # Total size of cache
-        self.cache = [] #list of (key, value) tuples
+        self.cache = [] #list of Cache elements (key, value, dirty)
         self.size = 0 # Current size of cache
         self.locks = {} # Dict to store key -> lock 
 
     def get(self, key):
         """ Get a value from a cache
             key: argument to get
-            Returns None if key,value is not in cache
+            Returns Value if found, None otherwise
         """
-        val = self.__evict(key)
-        self._insert(key, val)
+        val = None
+        position = self.__search(key)
+        if position is not None:
+            elem = self.__pop(key, position)
+            self.__insert(key, elem.value)
+            val = elem.value
         return val
 
     def put(self, key, value):
         """ Put a value to the cache
             key, value: arguments to put
-            Returns True if key existed in cache
+            Returns value if key existed in cache, else return None
         """
-        retflag = False
+        retval = None
         position = self.__search(key)
-        if position:
-            k, v = self.cache.pop(position)
-            retflag = True
-        if self.size < self.limit:
-            self.size += 1
-        else:
-            self.__evict()
-        self._insert(key, value)
-        return retflag
-
-    def __evict(self, key=None):
-        """ Private method to evict a key, value from cache
-            Evicts the last element by default (LRU)
+        if position is not None:
+            self.__pop(key, position)
+            self.__insert(key, value, dirty=True)
+            retval = value
+        return retval
+    
+    def insert(self, key, value):
+        """ Inserts an entry to cache
+            Returns key, value if an eviction of dirty entry had to be made,
+            else return (None, None)
         """
+        ret_key, ret_val = None, None
+        position = self.__search(key)
+        if position is not None:
+            self.put(key, value)
+        else:
+            if self.__is_full():
+                elem = self.__pop()
+                if elem.dirty:
+                    ret_key, ret_val = elem.key, elem.value
+            self.__insert(key, value)
+        return ret_key, ret_val
+                
+    def evict(self):
+        """ Evicts the last entry of the cache
+            Returns key, value if the evicted entry was dirty, 
+            else return (None, None)
+        """
+        ret_key, ret_val = None, None
+        if self.__is_full():
+            elem = self.__pop()
+            if elem.dirty:
+                ret_key, ret_val = elem.key, elem.value
+        return ret_key, ret_val
+
+    def __is_full(self):
+        return (self.size >= self.limit)
+
+    def __pop(self, key=None, position=None):
+        """ Private method: Pops an entry from cache
+            pops the last element by default (LRU)
+        """
+        elem = None
         if key:
             val = None
-            position = self.__search(key)
-            if position:
-                key, val = self.cache.pop(position)
+            if position is not None:
+                elem = self.cache.pop(position)
         else:
-            val = self.cache.pop()
-        return val
+            elem = self.cache.pop()
+        self.size = self.size-1
+        return elem
 
-    def _insert(self, key, value, position=0):
-        """ Inserts a value in the given position
+    def __insert(self, key, value, dirty=False, position=0):
+        """ Private method: Inserts a value in the given position
             By default inserts at the beginning (LRU)
         """
-        self.cache.insert(position, (key, value))
+        elem = CacheElement(key, value, dirty=dirty)
+        self.cache.insert(position, elem)
+        self.size = self.size+1
 
     def __search(self, key):
-        """ Search a key in cache
+        """ Private method: Searches a key in cache
             Return position if found, None otherwise
         """
         if key is None:
             return None
         for i, item in enumerate(self.cache):
-            if item[0] == key:
+            if item.key == key:
                 return i
         return None
 
-class ThreadSafeCache(Cache):
+    def show(self):
+        for item in self.cache:
+            print("Key: ", item.key, "Value: ", item.value, "Dirty: ", item.dirty)
