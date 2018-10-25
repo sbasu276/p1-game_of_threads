@@ -1,8 +1,9 @@
 class Request:
-    def __init__(self, op, key, value=None):
+    def __init__(self, op=None, key=None, value=None, fd=None):
         self.op = op
         self.key = key
         self.value = value
+				self.fd = fd
 
 def parse_req(request):
     req = request.strip('\n').split()
