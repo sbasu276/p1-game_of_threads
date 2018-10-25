@@ -7,7 +7,7 @@ PORT = 65432        # Port to listen on (non-privileged ports are > 1023)
 
 if __name__ == "__main__" :
 	server = PollingSocket(HOST, PORT)
-	requests_list = server.test()
+	requests_list = server.poll_connection()
 
 	for item in request_list:
 		op = item[1].strip('\n').split(' ')[0]
