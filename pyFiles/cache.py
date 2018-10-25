@@ -70,10 +70,10 @@ class Cache:
 
     def delete(self, key=None):
         """ Deletes an entry from cache
-            By default deletes the last entry
         """
         position = self.__search(key)
-        return self.__pop(key, position)
+        if position is not None:
+            self.__pop(key, position)
 
     def __is_full(self):
         return (self.size >= self.limit)
