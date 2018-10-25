@@ -3,7 +3,7 @@ import socket
 import threading
 from cache import Cache
 from persistent import Persistent
-from utils import parse_req, get, put, delete
+from utils import parse_req, get, put, insert, delete
 
 class MultiThreadedServer(object):
     def __init__(self, host, port, cache_size, db_name):
@@ -42,9 +42,14 @@ class MultiThreadedServer(object):
                 value = "NOT FOUND"
             #TODO send in batches.
             client_sock.send(value.encode('utf-8'))
-        elif req.op in ['PUT', 'INSERT']:
+        elif req.op == 'PUT':
             self.lock.acquire()
             put(req.key, req.value, self.cache, self.persistent)
+            self.lock.release()
+            client_sock.send("ACK".encode('utf-8'))
+        elif req.op == 'INSERT':
+            self.lock.acquire()
+            insert(req.key, req.value, self.cache, self.persistent)
             self.lock.release()
             client_sock.send("ACK".encode('utf-8'))
         elif req.op == 'DELETE':
@@ -54,7 +59,7 @@ class MultiThreadedServer(object):
             client_sock.send("ACK".encode('utf-8'))
         else:
             client_sock.send("WRONG OPERATION".encode('utf-8'))
-
+        self.cache.show()
         client_sock.close()
 
 if __name__ == "__main__":

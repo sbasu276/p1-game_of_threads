@@ -29,6 +29,7 @@ def put(key, value, cache, persistent):
     retval = cache.put(key, value)
     if retval is None:
         persistent.put(key, value)
+        cache.insert(key, value)
 
 def insert(key, value, cache, persistent):
     retkey, retval = cache.insert(key, value)
@@ -37,5 +38,4 @@ def insert(key, value, cache, persistent):
 
 def delete(key, cache, persistent):
     elem = cache.delete(key)
-    if elem is None:
-        persistent.delete(key)
+    persistent.delete(key)
