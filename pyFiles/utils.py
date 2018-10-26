@@ -38,7 +38,9 @@ def put(key, value, cache, persistent):
     retval = cache.put(key, value)
     if retval is None:
         persistent.put(key, value)
-        cache.insert(key, value)
+        retkey, retval = cache.insert(key, value, dirty=False)
+        if retkey and retval:
+            persistent.put(retkey, retval)
 
 def insert(key, value, cache, persistent):
     retkey, retval = cache.insert(key, value)

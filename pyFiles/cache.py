@@ -22,7 +22,7 @@ class Cache:
         position = self.__search(key)
         if position is not None:
             elem = self.__pop(key, position)
-            self.__insert(key, elem.value)
+            self.__insert(key, elem.value, dirty=elem.dirty)
             val = elem.value
         return val
 
