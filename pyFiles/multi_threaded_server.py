@@ -25,10 +25,10 @@ class MultiThreadedServer(object):
             pthread.start()
     
     def thread_handler(self, client_sock, address):
-        size = 1024
-        data = ""
-        print("in handler")
+      size = 1024
+      while True:  
         while True:
+            data = ""
             transfer = client_sock.recv(size)
             data = data + transfer.decode('utf-8')
             if '\n' in transfer.decode('utf-8'):
@@ -59,8 +59,10 @@ class MultiThreadedServer(object):
             client_sock.send("ACK".encode('utf-8'))
         else:
             client_sock.send("WRONG OPERATION".encode('utf-8'))
+        print("----Cache contents----")
         self.cache.show()
-        client_sock.close()
+        print("----------END---------")
+      #client_sock.close()
 
 if __name__ == "__main__":
     host = sys.argv[1]
