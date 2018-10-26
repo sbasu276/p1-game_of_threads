@@ -17,6 +17,7 @@ class PollingServer:
         self.pool = {}
         self.workers = workers #number of workers in thread pool
         self.polling = None
+        self.pending_reqs = {} #dict to store pending requests on a key
 
     def init_helpers(self):
         for i in range(self.workers):
@@ -28,6 +29,27 @@ class PollingServer:
     def run_helpers(self):    
         for thread in self.pool.values():
             thread.start()
+
+    def issue_request(self, req):
+        if req.key not in self.pending_reqs:
+            self.req_queue.put(req, block=False)
+        self.pending_reqs.setdefault(req.key, []).append(req)
+
+    def get_responses(self):
+        responses = []
+        for i in range(self.workers):
+            response = self.resp_queue.get(block=False)
+            if len(self.pending_reqs[response.key])==1:
+                del self.pending_reqs[response.key]
+            else:
+                self.req_queue.put(self.pending_reqs[response.key][0], block=False)
+                new_pending = self.pending_reqs[response.key].pop(0)
+                self.pending_reqs[response.key] = new_pending
+            responses.append(response)
+            if self.resp_queue.empty()==True:
+                break
+        return responses
+
 
     def run_server(self):
         self.polling = PollingSocket(self.host, self.port)
@@ -48,7 +70,8 @@ class PollingServer:
                     if val is None:
                         # Cache miss: non-blocking put to req_queue
                         # for helper_threads to consume 
-                        self.req_queue.put(req, block=False)
+                        #self.req_queue.put(req, block=False)
+                        self.issue_request(req)
                         print("REQ SUB")
                     else:
                         resp = val
@@ -57,8 +80,9 @@ class PollingServer:
                 elif req.op == 'PUT':
                     retval = self.cache.put(req.key, req.value)    
                     if retval is None:
-                        self.req_queue.put(req, block=False)
-                        cache.insert(req.key, req.value)
+                        #self.req_queue.put(req, block=False)
+                        self.issue_request(req)
+                        self.cache.insert(req.key, req.value)
                     else:
                         resp = "ACK"
                         add_response(self.polling.sock_data_map, request[0], resp)
@@ -66,13 +90,15 @@ class PollingServer:
                 elif req.op == 'INSERT':
                     retkey, retval = self.cache.insert(req.key, req.value)
                     if retkey and retval:
-                        self.req_queue.put(req, block=False)
+                        #self.req_queue.put(req, block=False)
+                        self.issue_request(req)
                     resp = "ACK"
                     add_response(self.polling.sock_data_map, request[0], resp)
                 
                 elif req.op == 'DELETE':
                     self.cache.delete(req.key)
-                    self.req_queue.put(req, block=False)
+                    #self.req_queue.put(req, block=False)
+                    self.issue_request(req)
                     resp = "ACK"
                     add_response(self.polling.sock_data_map, request[0], resp)
 
@@ -82,13 +108,13 @@ class PollingServer:
 
             # Consume from response queue (non-blocking)
             try:
-                completion = self.resp_queue.get(block=False)
-                print("Compl ", completion.value)
-                #completion.value is actual value for GET
-                #for PUT/INSERT/DEL, value is "ACK" message
-                #value is "-1" for all errors
-                resp = completion.value
-                add_response(self.polling.sock_data_map, completion.fd, resp)
+                responses = self.get_responses()
+                for resp in responses:
+                    print("Compl ", resp.value)
+                    #completion.value is actual value for GET
+                    #for PUT/INSERT/DEL, value is "ACK" message
+                    #value is "-1" for all errors
+                    add_response(self.polling.sock_data_map, resp.fd, resp.value)
             except:
                 pass
 

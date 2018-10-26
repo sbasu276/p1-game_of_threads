@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
     client = Client(server_address, port)
     #client.send_data("GET xxx\n".encode('utf-8'))
-    #client.send_data("PUT Soumen Basu\n".encode('utf-8'))
-    client.send_data("INSERT Timmy Zhu\n".encode('utf-8'))
+    client.send_data("DELETE Soumen Basu\n".encode('utf-8'))
+    #client.send_data("INSERT Timmy Zhu\n".encode('utf-8'))
     #client.send_data("PUT Ram Mohan\n".encode('utf-8'))
 
