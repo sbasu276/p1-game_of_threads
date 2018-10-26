@@ -43,8 +43,8 @@ class PollingSocket:
                 new_request = None
         else:
             # Write event has occured in socket
-            if data.resp:
-                sent = sock.send(data.resp)
+            if len(data.resp):
+                sent = sock.send(data.resp.encode('utf-8'))
                 data.resp = data.resp[sent:]
                 self.sock_data_map[sock] = data
 

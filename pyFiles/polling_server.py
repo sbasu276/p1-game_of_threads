@@ -17,8 +17,6 @@ class PollingServer:
         self.pool = {}
         self.workers = workers #number of workers in thread pool
         self.polling = None
-        self.init_helpers()
-        self.run_helpers()
 
     def init_helpers(self):
         for i in range(self.workers):
@@ -33,6 +31,8 @@ class PollingServer:
 
     def run_server(self):
         self.polling = PollingSocket(self.host, self.port)
+        self.init_helpers()
+        self.run_helpers()
         while True:
             requests = self.polling.poll_connection()
             for request in requests:
@@ -49,8 +49,9 @@ class PollingServer:
                         # Cache miss: non-blocking put to req_queue
                         # for helper_threads to consume 
                         self.req_queue.put(req, block=False)
+                        print("REQ SUB")
                     else:
-                        resp = val.encode('utf-8')
+                        resp = val
                         add_response(self.polling.sock_data_map, request[0], resp)
                 
                 elif req.op == 'PUT':
@@ -59,36 +60,37 @@ class PollingServer:
                         self.req_queue.put(req, block=False)
                         cache.insert(req.key, req.value)
                     else:
-                        resp = "ACK".encode('utf-8')
+                        resp = "ACK"
                         add_response(self.polling.sock_data_map, request[0], resp)
 
                 elif req.op == 'INSERT':
                     retkey, retval = self.cache.insert(req.key, req.value)
                     if retkey and retval:
                         self.req_queue.put(req, block=False)
-                    resp = "ACK".encode('utf-8')
+                    resp = "ACK"
                     add_response(self.polling.sock_data_map, request[0], resp)
                 
                 elif req.op == 'DELETE':
                     self.cache.delete(req.key)
                     self.req_queue.put(req, block=False)
-                    resp = "ACK".encode('utf-8')
+                    resp = "ACK"
                     add_response(self.polling.sock_data_map, request[0], resp)
 
                 else:
                     resp = "WRONG OPERATION".encode('utf-8')
                     add_response(self.polling.sock_data_map, request[0], resp)
 
-                # Consume from response queue (non-blocking)
-                try:
-                    completion = self.resp_queue.get(block=False)
-                    #completion.value is actual value for GET
-                    #for PUT/INSERT/DEL, value is "ACK" message
-                    #value is "-1" for all errors
-                    resp = completion.value
-                    add_response(self.polling.sock_data_map, completion.fd, resp)
-                except:
-                    pass
+            # Consume from response queue (non-blocking)
+            try:
+                completion = self.resp_queue.get(block=False)
+                print("Compl ", completion.value)
+                #completion.value is actual value for GET
+                #for PUT/INSERT/DEL, value is "ACK" message
+                #value is "-1" for all errors
+                resp = completion.value
+                add_response(self.polling.sock_data_map, completion.fd, resp)
+            except:
+                pass
 
 
 if __name__ == "__main__":

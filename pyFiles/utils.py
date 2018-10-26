@@ -17,7 +17,9 @@ def parse_req(request):
     return request
 
 def add_response(mapper, sock, response):
-    mapper[sock] = response
+    data = mapper[sock]
+    data.resp = response
+    mapper[sock] = data
 
 def get(key, cache, persistent):
     val = cache.get(key)
