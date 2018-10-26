@@ -1,5 +1,5 @@
-from multiprocessing import Pool as ThreadPool
 from queue import Queue
+from threading import Thread, Lock
 
 class OperationError(Exception):
     def __init__(self, op):
@@ -12,11 +12,20 @@ def io_handler(req_queue, resp_queue, persistent):
         try:
             event = req_queue.get()
             if event.op == 'GET':
-                event.value = persistent.get(event.key)
+                value = persistent.get(event.key)
+                event.value = value if value else "-1"
             elif event.op in ['PUT', 'INSERT']:
-                persistent.put(event.key, event.value)
+                try:
+                    persistent.put(event.key, event.value)
+                    event.value = "ACK"
+                except:
+                    event.value = "-1"
             elif event.op == 'DELETE':
-                persistent.delete(event.key)
+                try:
+                    persistent.delete(event.key)
+                    event.value = "ACK"
+                except:
+                    event.value = "-1"
             else:
                 pass
             resp_queue.put(event)

@@ -3,9 +3,10 @@ class Request:
         self.op = op
         self.key = key
         self.value = value
-				self.fd = fd
+        self.fd = fd
 
 def parse_req(request):
+    print("UTIL ", request)
     req = request.strip('\n').split()
     print(req)
     request = None
@@ -15,6 +16,9 @@ def parse_req(request):
         request = Request(req[0], req[1])
     return request
 
+def add_response(mapper, sock, response):
+    mapper[sock] = response
+
 def get(key, cache, persistent):
     val = cache.get(key)
     if val is None:
@@ -23,7 +27,10 @@ def get(key, cache, persistent):
             retkey, retval = cache.insert(key, val, dirty=False)
             if retkey and retval:
                 persistent.put(retkey, retval)
-    return val
+    if val:
+        return val
+    else:
+        return "-1"
 
 def put(key, value, cache, persistent):
     retval = cache.put(key, value)

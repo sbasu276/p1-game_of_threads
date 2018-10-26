@@ -8,25 +8,34 @@ class Client:
         self.port = port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+
     def send_data(self, message):
         try:
             self.sock.connect(server_address)
+            self.sock.setblocking(0)
             # Send data
             self.sock.send(message)
-            print("Data sent")
-            data = self.sock.recv(1024)
-            print(data.decode('utf-8'))
+            """
+            amount_received = 0
+            amount_expected = len(message)
+            while amount_received < amount_expected:
+                #sleep(1)
+                data = self.sock.recv(2)
+                amount_received += len(data)
+                print >>sys.stderr, 'received "%s"' % data
+            """
         finally:
+            print >>sys.stderr, 'closing socket'
             self.sock.close()
 
 if __name__ == "__main__":
     # Connect the socket to the port where the server is listening
     port = int(sys.argv[1])
     server_address = ('localhost', port)
+    print "connecting to %s port %s"%(server_address, port)
 
     client = Client(server_address, port)
-    #client.send_data("GET Rafael\n".encode('utf-8'))
-    #client.send_data("PUT Soumen Basu\n".encode('utf-8'))
-    client.send_data("INSERT Bhuvan Urgaonkar\n".encode('utf-8'))
-    #client.send_data("PUT Ram Mohan\n".encode('utf-8'))
+    data = "THIS IS A SAMPLE I/O MESSAGE WHICH WILL SLEEP\n"*1024*10
+    client.send_data(data)
+
 
