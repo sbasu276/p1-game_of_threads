@@ -27,6 +27,7 @@ def get(key, cache, persistent):
 def put(key, value, cache, persistent):
     retval = cache.put(key, value)
     if retval is None:
+        print(type(key), key)
         persistent.put(key, value)
         cache.insert(key, value)
 
