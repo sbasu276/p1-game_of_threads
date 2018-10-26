@@ -1,7 +1,7 @@
 import sys
 import socket
 import threading
-from cache import Cache
+from locking_cache import Cache
 from persistent import Persistent
 from utils import parse_req, get, put, insert, delete
 
