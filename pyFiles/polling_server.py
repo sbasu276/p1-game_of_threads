@@ -2,7 +2,7 @@ from polling import PollingSocket
 from cache import Cache
 from persistent import Persistent
 from queue import Queue
-from utils import parse_req, add_response
+from utils import Request, parse_req, add_response
 import sys
 from helper_threads import Thread, io_handler
 
@@ -50,7 +50,6 @@ class PollingServer:
                 break
         return responses
 
-
     def run_server(self):
         self.polling = PollingSocket(self.host, self.port)
         self.init_helpers()
@@ -60,7 +59,6 @@ class PollingServer:
             for request in requests:
                 #request is a tuple of sock, request_data
                 data = request[1]
-                print("RECV ",data)
                 #Process request here
                 req = parse_req(data.decode('utf-8'))
                 req.fd = request[0]
@@ -70,9 +68,7 @@ class PollingServer:
                     if val is None:
                         # Cache miss: non-blocking put to req_queue
                         # for helper_threads to consume 
-                        #self.req_queue.put(req, block=False)
                         self.issue_request(req)
-                        print("REQ SUB")
                     else:
                         resp = val
                         add_response(self.polling.sock_data_map, request[0], resp)
@@ -80,7 +76,6 @@ class PollingServer:
                 elif req.op == 'PUT':
                     retval = self.cache.put(req.key, req.value)    
                     if retval is None:
-                        #self.req_queue.put(req, block=False)
                         self.issue_request(req)
                         self.cache.insert(req.key, req.value)
                     else:
@@ -90,14 +85,12 @@ class PollingServer:
                 elif req.op == 'INSERT':
                     retkey, retval = self.cache.insert(req.key, req.value)
                     if retkey and retval:
-                        #self.req_queue.put(req, block=False)
                         self.issue_request(req)
                     resp = "ACK"
                     add_response(self.polling.sock_data_map, request[0], resp)
                 
                 elif req.op == 'DELETE':
                     self.cache.delete(req.key)
-                    #self.req_queue.put(req, block=False)
                     self.issue_request(req)
                     resp = "ACK"
                     add_response(self.polling.sock_data_map, request[0], resp)
@@ -110,14 +103,31 @@ class PollingServer:
             try:
                 responses = self.get_responses()
                 for resp in responses:
-                    print("Compl ", resp.value)
-                    #completion.value is actual value for GET
+                    #resp.value is actual value for GET
                     #for PUT/INSERT/DEL, value is "ACK" message
                     #value is "-1" for all errors
+                    if resp.fd is None:
+                        continue
                     add_response(self.polling.sock_data_map, resp.fd, resp.value)
+                    #Entry brought to cache line for GET/PUT miss
+                    if resp.op == 'GET':
+                        if resp.value != "-1":
+                            retkey, retval = self.cache.insert(resp.key, \
+                                                               resp.value, dirty=False)
+                            # Issue new request to write back dirty eviction to DB
+                            if retkey and retval:
+                                wb_req = Request('INSERT', retkey, retval)
+                                self.issue_request(wb_req)
+                    elif resp.op == 'PUT':
+                        retkey, retval = self.cache.insert(resp.key, resp.value, dirty=False)
+                        if retkey and retval:
+                            wb_req = Request('INSERT', retkey, retval)
+                            self.issue_request(wb_req)
+                    else:
+                        pass
+                #self.cache.show()
             except:
                 pass
-
 
 if __name__ == "__main__":
     host = sys.argv[1]
