@@ -5,25 +5,27 @@ class CacheElement:
         self.dirty = dirty
 
 class Cache:
-    def __init__(self, size):
+    def __init__(self, size, lock):
         """ Initialize the Cache
         """
         self.limit = size # Total size of cache
         self.cache = [] #list of Cache elements (key, value, dirty)
         self.size = 0 # Current size of cache
-        self.locks = {} # Dict to store key -> lock 
+        self.lock = lock 
 
     def get(self, key):
         """ Get a value from a cache
             key: argument to get
             Returns Value if found, None otherwise
         """
+        self.lock.acquire()
         val = None
         position = self.__search(key)
         if position is not None:
             elem = self.__pop(key, position)
             self.__insert(key, elem.value, dirty=elem.dirty)
             val = elem.value
+        self.lock.release()
         return val
 
     def put(self, key, value):
@@ -32,11 +34,13 @@ class Cache:
             Returns value if key existed in cache, else return None
         """
         retval = None
+        self.lock.acquire()
         position = self.__search(key)
         if position is not None:
             self.__pop(key, position)
             self.__insert(key, value, dirty=True)
             retval = value
+        self.lock.release()
         return retval
     
     def insert(self, key, value, dirty=True):
@@ -44,6 +48,7 @@ class Cache:
             Returns key, value if an eviction of dirty entry had to be made,
             else return (None, None)
         """
+        self.lock.acquire()
         ret_key, ret_val = None, None
         position = self.__search(key)
         if position is not None:
@@ -54,6 +59,7 @@ class Cache:
                 if elem.dirty:
                     ret_key, ret_val = elem.key, elem.value
             self.__insert(key, value, dirty=dirty)
+        self.lock.release()
         return ret_key, ret_val
                 
     def evict(self):
@@ -61,19 +67,23 @@ class Cache:
             Returns key, value if the evicted entry was dirty, 
             else return (None, None)
         """
+        self.lock.acquire()
         ret_key, ret_val = None, None
         if self.__is_full():
             elem = self.__pop()
             if elem.dirty:
                 ret_key, ret_val = elem.key, elem.value
+        self.lock.release()
         return ret_key, ret_val
 
     def delete(self, key=None):
         """ Deletes an entry from cache
         """
+        self.lock.acquire()
         position = self.__search(key)
         if position is not None:
             self.__pop(key, position)
+        self.lock.release()
 
     def __is_full(self):
         return (self.size >= self.limit)

@@ -12,9 +12,9 @@ class MultiThreadedServer(object):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         #self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind((self.host, self.port))
-        self.cache = Cache(cache_size)
-        self.persistent = Persistent(db_name)
         self.lock = threading.Lock()
+        self.cache = Cache(cache_size, self.lock)
+        self.persistent = Persistent(db_name)
 
     def run_server(self):
         self.sock.listen(5)
@@ -35,27 +35,27 @@ class MultiThreadedServer(object):
                 break
         req = parse_req(data)
         if req.op == 'GET':
-            self.lock.acquire()
+            #self.lock.acquire()
             value = get(req.key, self.cache, self.persistent)
-            self.lock.release()
+            #self.lock.release()
             if value is None:
                 value = "NOT FOUND"
             #TODO send in batches.
             client_sock.send(value.encode('utf-8'))
         elif req.op == 'PUT':
-            self.lock.acquire()
+            #self.lock.acquire()
             put(req.key, req.value, self.cache, self.persistent)
-            self.lock.release()
+            #self.lock.release()
             client_sock.send("ACK".encode('utf-8'))
         elif req.op == 'INSERT':
-            self.lock.acquire()
+            #self.lock.acquire()
             insert(req.key, req.value, self.cache, self.persistent)
-            self.lock.release()
+            #self.lock.release()
             client_sock.send("ACK".encode('utf-8'))
         elif req.op == 'DELETE':
-            self.lock.acquire()
+            #self.lock.acquire()
             delete(req.key, self.cache, self.persistent)
-            self.lock.release()
+            #self.lock.release()
             client_sock.send("ACK".encode('utf-8'))
         else:
             client_sock.send("WRONG OPERATION".encode('utf-8'))
