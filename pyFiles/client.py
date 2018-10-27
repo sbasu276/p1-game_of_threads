@@ -16,6 +16,7 @@ class Client:
             print("Data sent")
             data = self.sock.recv(1024)
             print(data.decode('utf-8'))
+            self.sock.send(b'')
         finally:
             self.sock.close()
 
@@ -25,8 +26,9 @@ if __name__ == "__main__":
     server_address = ('localhost', port)
 
     client = Client(server_address, port)
+    client.send_data("Hello!\n".encode('utf-8'))
     #client.send_data("GET Rafael\n".encode('utf-8'))
     #client.send_data("PUT Soumen Basu\n".encode('utf-8'))
-    client.send_data("INSERT Bhuvan Fededer\n".encode('utf-8'))
+    #client.send_data("INSERT Bhuvan Fededer\n".encode('utf-8'))
     #client.send_data("PUT Ram Mohan\n".encode('utf-8'))
 
