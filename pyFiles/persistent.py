@@ -9,13 +9,27 @@ class Persistent:
         return self.db.get(key)
 
     def put(self, key, value):
-        self.db.set(key, value)
-        self.db.dump()
+        if self.db.get(key):
+            self.db.set(key, value)
+            self.db.dump()
+            return True
+        else:
+            return False
 
     def insert(self, key, value):
+        if self.db.get(key):
+            return False
         self.put(key, value)
+        return True
 
     def delete(self, key):
-        self.db.rem(key)
+        try:
+            self.db.rem(key)
+            self.db.dump()
+            return True
+        except:
+            return False
+       
+    def writeback(self, key, value):
+        self.db.set(key, value)
         self.db.dump()
-        

@@ -47,14 +47,15 @@ class Cache:
         ret_key, ret_val = None, None
         position = self.__search(key)
         if position is not None:
-            self.put(key, value)
+            #self.cache.put(key, value)
+            return None, None, False
         else:
             if self.__is_full():
                 elem = self.__pop()
                 if elem.dirty:
                     ret_key, ret_val = elem.key, elem.value
             self.__insert(key, value, dirty=dirty)
-        return ret_key, ret_val
+        return ret_key, ret_val, True
                 
     def evict(self):
         """ Evicts the last entry of the cache
@@ -74,6 +75,8 @@ class Cache:
         position = self.__search(key)
         if position is not None:
             self.__pop(key, position)
+            return True
+        return False
 
     def __is_full(self):
         return (self.size >= self.limit)

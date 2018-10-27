@@ -14,18 +14,33 @@ def io_handler(req_queue, resp_queue, persistent):
             if event.op == 'GET':
                 value = persistent.get(event.key)
                 event.value = value if value else "-1"
-            elif event.op in ['PUT', 'INSERT']:
+            elif event.op in 'PUT':
                 try:
-                    persistent.put(event.key, event.value)
-                    event.value = "ACK"
+                    result = persistent.put(event.key, event.value)
+                    if result is False:
+                        event.value = "-1"
+                except:
+                    event.value = "-1"
+            elif event.op in 'INSERT':
+                try:
+                    result = persistent.insert(event.key, event.value)
+                    if result is False:
+                        event.value = "-1"
                 except:
                     event.value = "-1"
             elif event.op == 'DELETE':
                 try:
-                    persistent.delete(event.key)
-                    event.value = "ACK"
+                    result = persistent.delete(event.key)
+                    if result:
+                        event.value = "ACK"
+                    else:
+                        event.value = "-1"
                 except:
                     event.value = "-1"
+            elif event.op == 'WRITEBACK':
+                #Internal operation. Not exposed.
+                print("WRITE BACK KEY: ", event.key, " VAL: ", event.value)
+                persistent.writeback(event.key, event.value)
             else:
                 pass
             resp_queue.put(event)

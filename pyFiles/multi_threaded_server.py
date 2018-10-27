@@ -3,7 +3,7 @@ import socket
 import threading
 from cache import Cache
 from persistent import Persistent
-from utils import parse_req, get, put, insert, delete
+from utils import parse_req, call_api
 
 class MultiThreadedServer(object):
     def __init__(self, host, port, cache_size, db_name):
@@ -34,31 +34,8 @@ class MultiThreadedServer(object):
             if '\n' in transfer.decode('utf-8'):
                 break
         req = parse_req(data)
-        if req.op == 'GET':
-            self.lock.acquire()
-            value = get(req.key, self.cache, self.persistent)
-            self.lock.release()
-            if value is None:
-                value = "NOT FOUND"
-            #TODO send in batches.
-            client_sock.send(value.encode('utf-8'))
-        elif req.op == 'PUT':
-            self.lock.acquire()
-            put(req.key, req.value, self.cache, self.persistent)
-            self.lock.release()
-            client_sock.send("ACK".encode('utf-8'))
-        elif req.op == 'INSERT':
-            self.lock.acquire()
-            insert(req.key, req.value, self.cache, self.persistent)
-            self.lock.release()
-            client_sock.send("ACK".encode('utf-8'))
-        elif req.op == 'DELETE':
-            self.lock.acquire()
-            delete(req.key, self.cache, self.persistent)
-            self.lock.release()
-            client_sock.send("ACK".encode('utf-8'))
-        else:
-            client_sock.send("WRONG OPERATION".encode('utf-8'))
+        resp = call_api(req, self.cache, self.persistent, self.lock)
+        client_sock.send(resp.encode('utf-8'))
         self.cache.show()
         client_sock.close()
 
