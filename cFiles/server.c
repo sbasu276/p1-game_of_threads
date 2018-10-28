@@ -1,4 +1,6 @@
 #include "server.h"
+#include <arpa/inet.h>
+
 
 int max (int a, int b) {
   return (a>b?a:b);
@@ -100,24 +102,41 @@ void *io_thread_func() {
 }
 
 static void incoming_connection_handler(int sig, siginfo_t *si, void *data) {
+
+	struct sockaddr_in in;
+	socklen_t sz = sizeof(in);
+	int incoming = accept(si->si_fd, (struct sockaddr*)&in, &sz);
+
+	char ip[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, &(in.sin_addr), ip, INET_ADDRSTRLEN);
+	printf("Connected to client: %s\n",ip);
+
+	int fl = fcntl(incoming, F_GETFL);
+	fl |= O_ASYNC|O_NONBLOCK;     /* want a signal on fd ready */
+	fcntl(incoming, F_SETFL, fl);
+	fcntl(incoming, F_SETSIG, SIGRTMIN + 3);
+	fcntl(incoming, F_SETOWN, getpid());
+}
+
+static void incoming_request_handler(int sig, siginfo_t *si, void *data) {
     int fl, valread;
     struct sockaddr_in in;
     socklen_t sz = sizeof(in);
     char *request_string, *request_key, *request_value, *tokens;
     char *temp_string;
-    incoming = (int *) malloc (sizeof(int));
-    *incoming = accept(initial_server_fd,(struct sockaddr*)&in, &sz);
+    int incoming = si->si_fd;
 
     temp = (struct continuation*) malloc (sizeof (struct continuation));
     temp->start_time = time(0);
 
     temp_string = (char *) malloc (1024 * sizeof(char));
     memset(temp->buffer, 0, 1024);
-    valread = read( *incoming , temp->buffer, 1024);
+    valread = read( incoming , temp->buffer, 1024);
 
     strcpy (temp_string, temp->buffer);
     tokens = strtok(temp_string, " ");
 
+		printf(tokens);
     if (strcmp(tokens, "GET") == 0) {
       temp->request_type = 0;
     } else {
@@ -125,7 +144,7 @@ static void incoming_connection_handler(int sig, siginfo_t *si, void *data) {
     }
 
     memset(temp->result, 0, 1024);
-    temp->fd = *incoming;
+    temp->fd = incoming;
 
     // Servicing the request
     if (temp->request_type == 0) {
@@ -169,7 +188,7 @@ static void incoming_connection_handler(int sig, siginfo_t *si, void *data) {
     }
 }
 
-static void outgoing_data_handler(int sig, siginfo_t *si, void *data) {
+static void outgoing_response_handler(int sig, siginfo_t *si, void *data) {
   // Function to be completed.
 
   struct continuation *temp_cont_to_send = (struct continuation*)si->si_value.sival_ptr;
@@ -232,7 +251,7 @@ void event_loop_scheduler() {
      fl = fcntl(initial_server_fd, F_GETFL);
      fl |= O_ASYNC|O_NONBLOCK;     /* want a signal on fd ready */
      fcntl(initial_server_fd, F_SETFL, fl);
-     fcntl(initial_server_fd, F_SETSIG, SIGRTMIN + 3);
+     fcntl(initial_server_fd, F_SETSIG, SIGRTMIN + 2);
      fcntl(initial_server_fd, F_SETOWN, getpid());
 
      if (listen(initial_server_fd, 5000) < 0) {
@@ -249,7 +268,7 @@ void event_loop_scheduler() {
 
 int main (void)
 {
-  struct sigaction act, react;
+  struct sigaction listen, act, react;
   my_pid = getpid();
 
   pending_head = pending_tail = NULL;
@@ -257,12 +276,17 @@ int main (void)
 
   file = fopen("names.txt", "r+");
 
-  act.sa_sigaction = incoming_connection_handler;
+  listen.sa_sigaction = incoming_connection_handler;
+  sigemptyset(&listen.sa_mask);
+  listen.sa_flags = SA_SIGINFO;
+  sigaction(SIGRTMIN + 2, &listen, NULL);
+
+  act.sa_sigaction = incoming_request_handler;
   sigemptyset(&act.sa_mask);
   act.sa_flags = SA_SIGINFO;
   sigaction(SIGRTMIN + 3, &act, NULL);
 
-  react.sa_sigaction = outgoing_data_handler;
+  react.sa_sigaction = outgoing_response_handler;
   sigemptyset(&react.sa_mask);
   react.sa_flags = SA_SIGINFO;
   sigaction(SIGRTMIN + 4, &react, NULL);

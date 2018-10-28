@@ -28,6 +28,7 @@ void *client_func() {
       exit(0);
   }
 
+	sleep(2);
   send(sock , hello[0] , strlen(hello[0]) , 0 );
   printf("REQUEST SENT: %s\n", hello[0]);
   valread = read( sock , buffer, 1024);

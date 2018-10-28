@@ -11,6 +11,8 @@
 #include <string.h>
 #include <sys/epoll.h>
 #include <pthread.h>
+#include <stdbool.h>
+
 
 #define SIGUNUSED   31
 
@@ -22,11 +24,13 @@
 #define PORT 8080
 
 #define CACHE_SIZE 101
-
 #define THREAD_POOL_SIZE 1
+#define MAX_CLIENTS 10
 
 /* When a SIGUSR1 signal arrives, set this variable. */
 volatile sig_atomic_t usr_interrupt = 0;
+
+bool sock_event[MAX_CLIENTS+3];
 
 struct continuation {
   int request_type; //0 for get 1 for put
