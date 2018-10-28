@@ -31,6 +31,9 @@
 /* When a SIGUSR1 signal arrives, set this variable. */
 volatile sig_atomic_t usr_interrupt = 0;
 
+int request_pipe_fd[2];
+int response_pipe_fd[2];
+
 bool sock_event[MAX_CLIENTS+3];
 
 struct continuation {
@@ -46,9 +49,12 @@ struct pending_queue {
   struct pending_queue *next;
 }*pending_head, *pending_tail, *pending_node;
 
+enum state = {Clean = 0, Dirty = 1};
+
 struct node {
   char *name;
   char *defn;
+	enum state myState;
   struct node *next, *prev;
 }*cache_head,*cache_tail,*curr,*temp_node;
 

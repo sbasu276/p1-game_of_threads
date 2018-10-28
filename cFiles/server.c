@@ -51,6 +51,7 @@ void put (char *name, char *defn) {
     temp_node = (struct node*) malloc (sizeof(struct node));
     temp_node->name = strdups(name);
     temp_node->defn = strdups(defn);
+		temp_node->state = Dirty;
     temp_node->next = temp_node->prev = NULL;
     if(cache_head == NULL) {
       cache_head = cache_tail = temp_node;
@@ -63,9 +64,20 @@ void put (char *name, char *defn) {
     if (global_cache_count >= CACHE_SIZE) {
       // cache is full, evict the last node
       // insert a new node in the list
+			// Write-back if it is a dirty entry	
+			if(cache_tail->state == Dirty){
+        pending_node = (struct pending_queue*) malloc (sizeof(struct pending_queue));
+        pending_node->cont = cache_tail;
+        pending_node->next = NULL;
+        if (pending_head == NULL) {
+          pending_head = pending_tail = pending_node;
+        } else {
+          pending_tail->next = pending_node;
+          pending_tail = pending_node;
+        }
+			}
       cache_tail = cache_tail->prev;
       cache_tail->next = NULL;
-
       //TODO: Free the memory as you evict nodes
     } else {
       // Increase the count
@@ -73,7 +85,8 @@ void put (char *name, char *defn) {
     }
   } else {
     // update cache entry
-    cache_entry->defn = strdups(defn);
+    cache_entry->defn		= strdups(defn);
+		cache_entry->state	= Dirty;
   }
 }
 
@@ -121,7 +134,7 @@ void *io_thread_func() {
 					}
 				}
       }
-			else { //PUT Request
+			else { //PUT Request - assuming a maximum key value pair size. else data will be overwritten
 				while((retval = getline(&line, &len, myFile)) > 0){
 					token = strtok(line, " ");
 					if(strcmp(token, request_key) == 0){
@@ -322,6 +335,13 @@ void event_loop_scheduler() {
   }
 }
 
+void issue_IO_request(struct continuation *cref) {
+
+	if(write(request_pipe_fd, cref, sizeof(continuation) == -1)
+		printf("Sending request through pipe failed!\n");
+	
+}
+
 int main (void)
 {
   struct sigaction listen, act, react;
@@ -329,6 +349,9 @@ int main (void)
 
   pending_head = pending_tail = NULL;
   cache_head = cache_tail = curr = temp_node = NULL;
+
+	pipe(request_pipe_fd);
+	pipe(response_pipe_fd);
 
   listen.sa_sigaction = incoming_connection_handler;
   sigemptyset(&listen.sa_mask);
