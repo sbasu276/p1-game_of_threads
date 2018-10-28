@@ -23,15 +23,15 @@ def add_response(mapper, sock, response):
         mapper[sock] = data
 
 def get(key, cache, persistent, lock):
-    lock.acquire()
+    #lock.acquire()
     val = cache.get(key)
-    lock.release()
+    #lock.release()
     if val is None:
         val = persistent.get(key)
         if val:
-            lock.acquire()
-            retkey, retval = cache.insert(key, val, dirty=False)
-            lock.release()
+            #lock.acquire()
+            retkey, retval, _ = cache.insert(key, val, dirty=False)
+            #lock.release()
             if retkey and retval:
                 persistent.writeback(retkey, retval)
     if val:
@@ -40,14 +40,14 @@ def get(key, cache, persistent, lock):
         return "-1"
 
 def put(key, value, cache, persistent, lock):
-    lock.acquire()
+    #lock.acquire()
     retval = cache.put(key, value)
-    lock.release()
+    #lock.release()
     if retval is None:
         if persistent.put(key, value):
-            lock.acquire()
-            retkey, retval = cache.insert(key, value, dirty=False)
-            lock.release()
+            #lock.acquire()
+            retkey, retval, _ = cache.insert(key, value, dirty=False)
+            #lock.release()
             if retkey and retval:
                 persistent.writeback(retkey, retval)
             return "ACK"
@@ -59,7 +59,7 @@ def put(key, value, cache, persistent, lock):
 def insert(key, value, cache, persistent, lock):
     if persistent.insert(key, value):
         lock.acquire()
-        retkey, retval = cache.insert(key, value)
+        retkey, retval, _ = cache.insert(key, value)
         lock.release()
         if retkey and retval:
             persistent.writeback(retkey, retval)
