@@ -15,28 +15,28 @@ char *strdups(char *s) {/* make a duplicate of s */
 }
 
 struct node* get (char *s) {
-  curr = head;
+  curr = cache_head;
   while (curr != NULL) {
     if (strcmp(curr->name, s) == 0) {
       //found in cache, move node to head of list
       // and return value of key
 
-      if(curr != head) {
+      if(curr != cache_head) {
         temp_node = curr->prev;
-        if (curr == tail) {
+        if (curr == cache_tail) {
           temp_node->next = NULL;
-          tail = temp_node;
+          cache_tail = temp_node;
         } else {
           temp_node->next = curr->next;
           curr->next->prev = temp_node;
         }
 
-        head->prev = curr;
-        curr->next = head;
+        cache_head->prev = curr;
+        curr->next = cache_head;
         curr->prev = NULL;
-        head = curr;
+        cache_head = curr;
       }
-      return head;
+      return cache_head;
     }
     curr = curr->next;
   }
@@ -52,19 +52,19 @@ void put (char *name, char *defn) {
     temp_node->name = strdups(name);
     temp_node->defn = strdups(defn);
     temp_node->next = temp_node->prev = NULL;
-    if(head == NULL) {
-      head = tail = temp_node;
+    if(cache_head == NULL) {
+      cache_head = cache_tail = temp_node;
     } else {
-      head->prev = temp_node;
-      temp_node->next = head;
+      cache_head->prev = temp_node;
+      temp_node->next = cache_head;
       temp_node->prev = NULL;
-      head = temp_node;
+      cache_head = temp_node;
     }
     if (global_cache_count >= CACHE_SIZE) {
       // cache is full, evict the last node
       // insert a new node in the list
-      tail = tail->prev;
-      tail->next = NULL;
+      cache_tail = cache_tail->prev;
+      cache_tail->next = NULL;
 
       //TODO: Free the memory as you evict nodes
     } else {
@@ -85,18 +85,66 @@ void *io_thread_func() {
   // Complete this function to implement I/O functionality
   // for incoming requests and handle proper synchronization
   // among other helper threads
+	int retval, written, i;
+	size_t len;
+	char *token, *request_key, *request_value, *request_type, *response_value, *request;
+	FILE* myFile;
 
   while(1) {
     if (pending_head != NULL) {
-      if (pending_head->cont->request_type == 0) {
-       strcpy(pending_head->cont->result, "SAMPLE RESPONSE");
-      } else {
-       strcpy(pending_head->cont->result, "1");
+
+	    if((myFile = fopen("names.txt", "rb+")) == NULL){
+				printf("Unable to open file\n");
+				exit(0);
+			}
+
+			request = pending_head->cont->buffer;
+			char* line = malloc (MAX_KEY_VALUE_SIZE);
+			request_type	= strtok(request, " ");
+			request_key		= strtok(NULL, " ");
+			request_value	= strtok(NULL, " ");
+			printf("Working on %s %s request\n", request_type, request_key);
+
+			len = MAX_KEY_VALUE_SIZE;
+			rewind(myFile);
+
+      if (pending_head->cont->request_type == 0) { //GET Request
+				while((retval = getline(&line, &len, myFile)) > 0){
+					token = strtok(line, " ");
+					if(strcmp(token, request_key) == 0){
+						printf("Key found in file!!\n");
+						response_value = strtok(NULL, " ");
+						response_value = strtok(response_value, "\n");
+      			strcpy(pending_head->cont->result, response_value);
+						printf("Response for GET %s is %s\n",request_key, response_value);
+						break;
+					}
+				}
       }
+			else { //PUT Request
+				while((retval = getline(&line, &len, myFile)) > 0){
+					token = strtok(line, " ");
+					if(strcmp(token, request_key) == 0){
+						printf("Key found in file!!\n");
+						strcpy(request, request_key);
+						strcat(request, " ");
+						strcat(request, request_value);
+						printf("Writing %s to file\n", request);
+						fseek(myFile, -retval, SEEK_CUR);
+						if(fputs(request, myFile)<=0)
+							printf("Error while writing to file\n");
+						for (i = strlen(request); i < retval-2; i++) //cleaning up the old data
+							fputs(" ", myFile);
+						strcpy(pending_head->cont->result, "ACK");
+						break;
+					}
+				}
+			}
       v = (union sigval*) malloc (sizeof(union sigval));
-        v->sival_ptr = pending_head->cont;
-        sigqueue(my_pid, SIGRTMIN+4, *v);
-        pending_head = pending_head->next;
+      v->sival_ptr = pending_head->cont;
+      sigqueue(my_pid, SIGRTMIN+4, *v);
+      pending_head = pending_head->next;
+			fclose(myFile);
     }
   }
 }
@@ -109,38 +157,46 @@ static void incoming_connection_handler(int sig, siginfo_t *si, void *data) {
 
 	char ip[INET_ADDRSTRLEN];
 	inet_ntop(AF_INET, &(in.sin_addr), ip, INET_ADDRSTRLEN);
-	printf("Connected to client: %s\n",ip);
+	printf("Connected to client: %s with fd: %d\n",ip, incoming);
 
 	int fl = fcntl(incoming, F_GETFL);
 	fl |= O_ASYNC|O_NONBLOCK;     /* want a signal on fd ready */
 	fcntl(incoming, F_SETFL, fl);
 	fcntl(incoming, F_SETSIG, SIGRTMIN + 3);
 	fcntl(incoming, F_SETOWN, getpid());
+
+	sock_event[incoming] = 1;
 }
 
 static void incoming_request_handler(int sig, siginfo_t *si, void *data) {
-    int fl, valread;
-    struct sockaddr_in in;
-    socklen_t sz = sizeof(in);
-    char *request_string, *request_key, *request_value, *tokens;
-    char *temp_string;
-    int incoming = si->si_fd;
+	sock_event[si->si_fd] = 1;
+}
+
+static void process_signal(int incoming) {
+  int valread;
+  char *request_string, *request_key, *request_value, *tokens;
+  char *temp_string;
+
+	printf("Processing signal from fd %d\n", incoming); 
+
+  temp_string = (char *) malloc (1024 * sizeof(char));
+	valread = read( incoming , temp_string, 1024);
+  if(valread > 0){
 
     temp = (struct continuation*) malloc (sizeof (struct continuation));
-    temp->start_time = time(0);
-
-    temp_string = (char *) malloc (1024 * sizeof(char));
     memset(temp->buffer, 0, 1024);
-    valread = read( incoming , temp->buffer, 1024);
+    temp_string = strtok(temp_string, "\n");
+    strcpy (temp->buffer, temp_string);
 
-    strcpy (temp_string, temp->buffer);
     tokens = strtok(temp_string, " ");
+		//printf(tokens);
 
-		printf(tokens);
     if (strcmp(tokens, "GET") == 0) {
       temp->request_type = 0;
+			printf("received a GET request.\n");
     } else {
       temp->request_type = 1;
+			printf("received a PUT request.\n");
     }
 
     memset(temp->result, 0, 1024);
@@ -186,6 +242,15 @@ static void incoming_request_handler(int sig, siginfo_t *si, void *data) {
         pending_tail = pending_node;
       }
     }
+	}
+	else if(valread == 0){
+		printf("Shutting socket with fd: %d\n",incoming);
+		close(incoming);
+	}
+	else{
+		printf("Irrelevant signal on socket with fd: %d\n", incoming);
+	}
+	free(temp_string);
 }
 
 static void outgoing_response_handler(int sig, siginfo_t *si, void *data) {
@@ -196,25 +261,8 @@ static void outgoing_response_handler(int sig, siginfo_t *si, void *data) {
   free(temp_cont_to_send);
 }
 
-static int make_socket_non_blocking (int sfd) {
-  int flags, s;
 
-  flags = fcntl (sfd, F_GETFL, 0);
-  if (flags == -1) {
-      perror ("fcntl");
-      return -1;
-  }
-  flags |= O_NONBLOCK;
-  s = fcntl (sfd, F_SETFL, flags);
-  if (s == -1) {
-      perror ("fcntl");
-      return -1;
-  }
-
-  return 0;
-}
-
-int server_func() {
+int init_server_sock() {
   int server_fd;
   addrlen = sizeof(address);
 
@@ -227,8 +275,8 @@ int server_func() {
   // Forcefully attaching socket to the port 8080
   if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
                                                 &opt, sizeof(opt))) {
-      perror("setsockopt");
-      exit(EXIT_FAILURE);
+    perror("setsockopt");
+    exit(EXIT_FAILURE);
   }
   address.sin_family = AF_INET;
   address.sin_addr.s_addr = INADDR_ANY;
@@ -237,33 +285,41 @@ int server_func() {
   // Forcefully attaching socket to the port 8080
   if (bind(server_fd, (struct sockaddr *)&address,
                                sizeof(address))<0) {
-      perror("bind failed");
-      exit(EXIT_FAILURE);
+    perror("bind failed");
+    exit(EXIT_FAILURE);
   }
+
+	int fl = fcntl(server_fd, F_GETFL);
+	fl |= O_ASYNC|O_NONBLOCK;     /* want a signal on fd ready */
+	fcntl(server_fd, F_SETFL, fl);
+	fcntl(server_fd, F_SETSIG, SIGRTMIN + 2);
+	fcntl(server_fd, F_SETOWN, getpid());
+	
+	if (listen(server_fd, 5000) < 0) {
+		perror("listen");
+		exit(EXIT_FAILURE);
+	}
 
   return server_fd;
 }
 
 void event_loop_scheduler() {
-     initial_server_fd = server_func();
-     int fl;
+	int i;
+	server_fd = init_server_sock();
 
-     fl = fcntl(initial_server_fd, F_GETFL);
-     fl |= O_ASYNC|O_NONBLOCK;     /* want a signal on fd ready */
-     fcntl(initial_server_fd, F_SETFL, fl);
-     fcntl(initial_server_fd, F_SETSIG, SIGRTMIN + 2);
-     fcntl(initial_server_fd, F_SETOWN, getpid());
-
-     if (listen(initial_server_fd, 5000) < 0) {
-         perror("listen");
-         exit(EXIT_FAILURE);
-     }
-
-     while (1) {
-        printf("Waiting for a signal\n");
-        pause();
-        printf("Got some event on fd\n");
-     }
+  while (1) {
+		for(i = 0; i < MAX_CLIENTS+3; i++){
+			if(sock_event[i] == 1){
+				printf("Signal was raised by socket with fd: %d\n", i);
+				sock_event[i] = 0;
+				process_signal(i);
+			}
+			else{
+				//printf("No events!\n");
+			}
+		}
+		sleep(1);
+  }
 }
 
 int main (void)
@@ -272,9 +328,7 @@ int main (void)
   my_pid = getpid();
 
   pending_head = pending_tail = NULL;
-  head = tail = curr = temp_node = NULL;
-
-  file = fopen("names.txt", "r+");
+  cache_head = cache_tail = curr = temp_node = NULL;
 
   listen.sa_sigaction = incoming_connection_handler;
   sigemptyset(&listen.sa_mask);
@@ -291,10 +345,14 @@ int main (void)
   react.sa_flags = SA_SIGINFO;
   sigaction(SIGRTMIN + 4, &react, NULL);
 
+	printf("Spawning threads!\n");
+
   //Creating I/O thread pool
   for (int i = 0; i < THREAD_POOL_SIZE; i++) {
     pthread_create(&io_thread[i], NULL, io_thread_func, NULL);
   }
+
+	printf("Threads spawned successfully!\n");
 
   event_loop_scheduler();
 

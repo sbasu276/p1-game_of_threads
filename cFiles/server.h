@@ -26,6 +26,7 @@
 #define CACHE_SIZE 101
 #define THREAD_POOL_SIZE 1
 #define MAX_CLIENTS 10
+#define MAX_KEY_VALUE_SIZE 512
 
 /* When a SIGUSR1 signal arrives, set this variable. */
 volatile sig_atomic_t usr_interrupt = 0;
@@ -49,14 +50,14 @@ struct node {
   char *name;
   char *defn;
   struct node *next, *prev;
-}*head,*tail,*curr,*temp_node;
+}*cache_head,*cache_tail,*curr,*temp_node;
 
 struct sockaddr_in address;
 pthread_t io_thread[THREAD_POOL_SIZE];
 int addrlen, opt = 1;
 int *val,*incoming;
 int *temp_val;
-int initial_server_fd;
+int server_fd;
 int global_cache_count = 0;
 pid_t my_pid;
 union sigval *v;
