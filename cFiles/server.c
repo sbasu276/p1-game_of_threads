@@ -44,14 +44,14 @@ struct node* get (char *s) {
   return NULL;
 }
 
-void put (char *name, char *defn) {
+void put(char *name, char *defn) {
   struct node *cache_entry;
   if ((cache_entry = get(name)) == NULL) {
     // value not in cache
     temp_node = (struct node*) malloc (sizeof(struct node));
     temp_node->name = strdups(name);
     temp_node->defn = strdups(defn);
-		temp_node->state = Dirty;
+		temp_node->myState = Dirty;
     temp_node->next = temp_node->prev = NULL;
     if(cache_head == NULL) {
       cache_head = cache_tail = temp_node;
@@ -65,16 +65,18 @@ void put (char *name, char *defn) {
       // cache is full, evict the last node
       // insert a new node in the list
 			// Write-back if it is a dirty entry	
-			if(cache_tail->state == Dirty){
-        pending_node = (struct pending_queue*) malloc (sizeof(struct pending_queue));
-        pending_node->cont = cache_tail;
-        pending_node->next = NULL;
-        if (pending_head == NULL) {
-          pending_head = pending_tail = pending_node;
-        } else {
-          pending_tail->next = pending_node;
-          pending_tail = pending_node;
-        }
+			if(cache_tail->myState == Dirty){
+		    temp = (struct continuation*) malloc (sizeof (struct continuation));
+		    memset(temp->name, 0, 1024);
+		    memset(temp->defn, 0, 1024);
+		    temp->request_type = PUT;
+				strcat(temp->name, cache_tail->name);
+				strcat(temp->defn, cache_tail->defn);
+				temp->file_op_type = 1;	//Writing to file
+				temp->sock_fd = -1;	//No clients to respond to
+
+				if(write(request_pipe_fd[1], temp, sizeof(temp) == -1))
+					printf("Sending request through pipe failed!\n");
 			}
       cache_tail = cache_tail->prev;
       cache_tail->next = NULL;
@@ -86,7 +88,7 @@ void put (char *name, char *defn) {
   } else {
     // update cache entry
     cache_entry->defn		= strdups(defn);
-		cache_entry->state	= Dirty;
+		cache_entry->myState	= Dirty;
   }
 }
 
@@ -95,40 +97,38 @@ void *io_thread_func() {
   // once the request is processed, the thread notifies
   // the event schuduler using a signal
 
-  // Complete this function to implement I/O functionality
-  // for incoming requests and handle proper synchronization
-  // among other helper threads
-	int retval, written, i;
+	int retval, written, i, ret;
 	size_t len;
-	char *token, *request_key, *request_value, *request_type, *response_value, *request;
+	char *token, *request_key, *request_value, *response_value, *request;
 	FILE* myFile;
+	struct continuation req, *cont_req;
 
+	cont_req = &req;
   while(1) {
-    if (pending_head != NULL) {
-
+    if ((ret = read(request_pipe_fd[0], cont_req, sizeof(struct continuation))) > 0) {
+			printf("HT %ld: Received a request\n",pthread_self());
 	    if((myFile = fopen("names.txt", "rb+")) == NULL){
 				printf("Unable to open file\n");
 				exit(0);
 			}
 
-			request = pending_head->cont->buffer;
 			char* line = malloc (MAX_KEY_VALUE_SIZE);
-			request_type	= strtok(request, " ");
-			request_key		= strtok(NULL, " ");
-			request_value	= strtok(NULL, " ");
-			printf("Working on %s %s request\n", request_type, request_key);
+			request_key		= cont_req->name;
+			request_value	= cont_req->defn;
+			printf("Working on %d %s request\n", cont_req->file_op_type, request_key);
 
 			len = MAX_KEY_VALUE_SIZE;
 			rewind(myFile);
 
-      if (pending_head->cont->request_type == 0) { //GET Request
+      if (cont_req->file_op_type == 0) { //GET Op
 				while((retval = getline(&line, &len, myFile)) > 0){
 					token = strtok(line, " ");
 					if(strcmp(token, request_key) == 0){
 						printf("Key found in file!!\n");
 						response_value = strtok(NULL, " ");
 						response_value = strtok(response_value, "\n");
-      			strcpy(pending_head->cont->result, response_value);
+      			strcpy(cont_req->defn, response_value);
+						cont_req->key_found = 1;
 						printf("Response for GET %s is %s\n",request_key, response_value);
 						break;
 					}
@@ -139,6 +139,7 @@ void *io_thread_func() {
 					token = strtok(line, " ");
 					if(strcmp(token, request_key) == 0){
 						printf("Key found in file!!\n");
+						cont_req->key_found = 1;
 						strcpy(request, request_key);
 						strcat(request, " ");
 						strcat(request, request_value);
@@ -148,17 +149,25 @@ void *io_thread_func() {
 							printf("Error while writing to file\n");
 						for (i = strlen(request); i < retval-2; i++) //cleaning up the old data
 							fputs(" ", myFile);
-						strcpy(pending_head->cont->result, "ACK");
 						break;
 					}
 				}
 			}
+
+			if(write(response_pipe_fd[1], cont_req, sizeof(struct continuation)) < 0)
+				printf("Write to pipe failed!\n");
+
+			//TODO: Cleanup
       v = (union sigval*) malloc (sizeof(union sigval));
-      v->sival_ptr = pending_head->cont;
+      v->sival_ptr = NULL;
       sigqueue(my_pid, SIGRTMIN+4, *v);
-      pending_head = pending_head->next;
 			fclose(myFile);
     }
+		if (ret == -1)
+			printf("Pipe read returned an error = %s\n", strerror(errno));
+		else
+			printf("HT %ld: Didn't find anything to work on!\n", pthread_self());
+		sleep(1);
   }
 }
 
@@ -186,75 +195,66 @@ static void incoming_request_handler(int sig, siginfo_t *si, void *data) {
 }
 
 static void process_signal(int incoming) {
-  int valread;
+  int valread, ret;
   char *request_string, *request_key, *request_value, *tokens;
   char *temp_string;
+  temp_string = (char *) malloc (1024 * sizeof(char));
 
 	printf("Processing signal from fd %d\n", incoming); 
-
-  temp_string = (char *) malloc (1024 * sizeof(char));
-	valread = read( incoming , temp_string, 1024);
+	valread = read(incoming , temp_string, 1024);
   if(valread > 0){
-
     temp = (struct continuation*) malloc (sizeof (struct continuation));
-    memset(temp->buffer, 0, 1024);
-    temp_string = strtok(temp_string, "\n");
-    strcpy (temp->buffer, temp_string);
+    memset(temp->name, 0, 1024);
+    memset(temp->defn, 0, 1024);
 
+    temp_string = strtok(temp_string, "\n");
     tokens = strtok(temp_string, " ");
-		//printf(tokens);
+    strcpy(temp->name, strtok(NULL, " "));
+    temp->sock_fd = incoming;
 
     if (strcmp(tokens, "GET") == 0) {
-      temp->request_type = 0;
-			printf("received a GET request.\n");
+      temp->request_type = GET;
+			printf("received a GET request for key %s\n", temp->name);
     } else {
-      temp->request_type = 1;
-			printf("received a PUT request.\n");
+      temp->request_type = PUT;
+    	strcpy(temp->defn, strtok(NULL, " "));
+			printf("received a PUT request for key %s\n", temp->name);
     }
-
-    memset(temp->result, 0, 1024);
-    temp->fd = incoming;
 
     // Servicing the request
-    if (temp->request_type == 0) {
-
+    if (temp->request_type == GET) {
       // This is a GET request, check the cache first
-      tokens = strtok(NULL, " ");
-      temp_node = get(tokens);
+      temp_node = get(temp->name);
       if (temp_node != NULL) {
-
         // Result found in cache
-        printf("\nResult found in cache\n\n");
-        strcpy(temp->result, temp_node->defn);
-        send(temp->fd ,temp->result , strlen(temp->result) , 0);
+        printf("Key found in cache\n");
+        strcpy(temp->defn, temp_node->defn);
+        send(temp->sock_fd ,temp->defn , strlen(temp->defn) , 0);
       } else {
-
-        // Not found in cache, issue request to I/O
-        pending_node = (struct pending_queue*) malloc (sizeof(struct pending_queue));
-        pending_node->cont = temp;
-        pending_node->next = NULL;
-        if (pending_head == NULL) {
-          pending_head = pending_tail = pending_node;
-        } else {
-          pending_tail->next = pending_node;
-          pending_tail = pending_node;
-        }
-      }
-    } else if (temp->request_type == 1) {
-
-      // This is a PUT request, complete the function
-      // to service the request.
-
-      pending_node = (struct pending_queue*) malloc (sizeof(struct pending_queue));
-      pending_node->cont = temp;
-      pending_node->next = NULL;
-      if (pending_head == NULL) {
-        pending_head = pending_tail = pending_node;
-      } else {
-        pending_tail->next = pending_node;
-        pending_tail = pending_node;
-      }
+				printf("Key missed in cache\n");
+	      // Not found in cache, issue request to I/O
+				temp->file_op_type = GET;
+				if(write(request_pipe_fd[1], temp, sizeof(struct continuation)) == -1)
+					printf("Sending request through pipe failed!\n");
+			}
+    } else if (temp->request_type == PUT) {
+      temp_node = get(temp->name);
+      if (temp_node != NULL) { //Key found in cache
+				printf("Key found in cache\n");
+				strcpy(temp_node->defn, temp->defn);
+				temp_node->myState = Dirty;
+        send(temp->sock_fd, "ACK" , 3 , 0);
+			}
+			else{
+				printf("Key missed in cache\n");
+				temp->file_op_type = GET;
+				printf("Size of continuation structure = %ld\n", sizeof(struct continuation));
+				while((ret = write(request_pipe_fd[1], temp, sizeof(struct continuation))) <= 0)
+					printf("Trying to end data to pipe, write returns %d \n",ret);
+				printf("Number of bytes written %d\n", ret);
+			}
     }
+		free(temp);
 	}
 	else if(valread == 0){
 		printf("Shutting socket with fd: %d\n",incoming);
@@ -266,12 +266,8 @@ static void process_signal(int incoming) {
 	free(temp_string);
 }
 
-static void outgoing_response_handler(int sig, siginfo_t *si, void *data) {
-  // Function to be completed.
-
-  struct continuation *temp_cont_to_send = (struct continuation*)si->si_value.sival_ptr;
-  send(temp_cont_to_send->fd, temp_cont_to_send->result, strlen(temp_cont_to_send->result), 0);
-  free(temp_cont_to_send);
+static void incoming_response_handler(int sig, siginfo_t *si, void *data) {
+	response_count++;
 }
 
 
@@ -318,9 +314,12 @@ int init_server_sock() {
 
 void event_loop_scheduler() {
 	int i;
+	struct continuation *resp, my_resp;
 	server_fd = init_server_sock();
+	resp = &my_resp;
 
   while (1) {
+		//Stage1: Processing incoming requests
 		for(i = 0; i < MAX_CLIENTS+3; i++){
 			if(sock_event[i] == 1){
 				printf("Signal was raised by socket with fd: %d\n", i);
@@ -331,15 +330,27 @@ void event_loop_scheduler() {
 				//printf("No events!\n");
 			}
 		}
+
+		//Stage2: Processing the responses from threads
+		int num_resp = response_count;
+		for(i = 0; i < num_resp; i++){
+			if(read(response_pipe_fd[0], resp, sizeof(struct continuation)) > 0){
+				if(resp->request_type == GET){//Get Response
+					if(resp->key_found == 1){
+						put(resp->name, resp->defn);
+						send(resp->sock_fd, resp->defn, strlen(resp->defn), 0);
+					}
+					else{
+						send(resp->sock_fd, "-1", 2, 0);
+					}
+				}
+				else {	//PUT Response
+					send(resp->sock_fd, "ACK", 3, 0);
+				}
+			}
+		}
 		sleep(1);
   }
-}
-
-void issue_IO_request(struct continuation *cref) {
-
-	if(write(request_pipe_fd, cref, sizeof(continuation) == -1)
-		printf("Sending request through pipe failed!\n");
-	
 }
 
 int main (void)
@@ -347,11 +358,13 @@ int main (void)
   struct sigaction listen, act, react;
   my_pid = getpid();
 
-  pending_head = pending_tail = NULL;
   cache_head = cache_tail = curr = temp_node = NULL;
 
 	pipe(request_pipe_fd);
 	pipe(response_pipe_fd);
+
+	fcntl(request_pipe_fd[0], F_SETFL, O_NONBLOCK);
+	fcntl(response_pipe_fd[1], F_SETFL, O_NONBLOCK);
 
   listen.sa_sigaction = incoming_connection_handler;
   sigemptyset(&listen.sa_mask);
@@ -363,7 +376,7 @@ int main (void)
   act.sa_flags = SA_SIGINFO;
   sigaction(SIGRTMIN + 3, &act, NULL);
 
-  react.sa_sigaction = outgoing_response_handler;
+  react.sa_sigaction = incoming_response_handler;
   sigemptyset(&react.sa_mask);
   react.sa_flags = SA_SIGINFO;
   sigaction(SIGRTMIN + 4, &react, NULL);

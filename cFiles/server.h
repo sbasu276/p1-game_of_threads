@@ -12,6 +12,7 @@
 #include <sys/epoll.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <errno.h>
 
 
 #define SIGUNUSED   31
@@ -35,21 +36,20 @@ int request_pipe_fd[2];
 int response_pipe_fd[2];
 
 bool sock_event[MAX_CLIENTS+3];
+int response_count = 0;
+
+enum req_type {GET = 0, PUT = 1, INSERT = 2, DELETE = 3};
+enum state {Clean = 0, Dirty = 1};
 
 struct continuation {
-  int request_type; //0 for get 1 for put
-  char buffer[1024];
-  int fd;
-  char result[1024];
+  int file_op_type; //0 for get 1 for put
+	enum req_type request_type ;
+  char name[1024];
+  int sock_fd;
+  char defn[1024];
+	bool key_found;
   time_t start_time, finish_time;
 }*temp;
-
-struct pending_queue {
-  struct continuation* cont;
-  struct pending_queue *next;
-}*pending_head, *pending_tail, *pending_node;
-
-enum state = {Clean = 0, Dirty = 1};
 
 struct node {
   char *name;
