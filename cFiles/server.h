@@ -25,7 +25,7 @@
 #define PORT 8080
 
 #define CACHE_SIZE 2
-#define THREAD_POOL_SIZE 1
+#define THREAD_POOL_SIZE 2
 #define MAX_CLIENTS 10
 #define MAX_KEY_VALUE_SIZE 512
 

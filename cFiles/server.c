@@ -107,14 +107,15 @@ void *io_thread_func() {
 	FILE* myFile;
 	struct continuation req, *cont_req;
 
+  if((myFile = fopen("names.txt", "rb+")) == NULL){
+		printf("HT: Unable to open file\n");
+		exit(0);
+	}
+
 	cont_req = &req;
   while(1) {
     if ((ret = read(request_pipe_fd[0], cont_req, sizeof(struct continuation))) > 0) {
 			printf("HT %ld: Received a request\n",pthread_self());
-	    if((myFile = fopen("names.txt", "rb+")) == NULL){
-				printf("HT: Unable to open file\n");
-				exit(0);
-			}
 
 			char* line = malloc (MAX_KEY_VALUE_SIZE);
 			request_key		= cont_req->name;
@@ -167,7 +168,6 @@ void *io_thread_func() {
       v = (union sigval*) malloc (sizeof(union sigval));
       v->sival_ptr = NULL;
       sigqueue(my_pid, SIGRTMIN+4, *v);
-			fclose(myFile);
     }
 //		if (ret == -1)
 //			printf("Pipe read returned an error = %s\n", strerror(errno)); TODO: why -1?
@@ -175,6 +175,7 @@ void *io_thread_func() {
 //			printf("HT %ld: Didn't find anything to work on!\n", pthread_self());
 		sleep(1);
   }
+	fclose(myFile);
 }
 
 static void incoming_connection_handler(int sig, siginfo_t *si, void *data) {
