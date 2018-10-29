@@ -45,6 +45,7 @@ struct node* get (char *s) {
 }
 
 void put(char *name, char *defn) {
+	printf("Inserting %s %s to the cache\n", name, defn);
 	int ret;
   struct node *cache_entry;
   if ((cache_entry = get(name)) == NULL) {
@@ -75,6 +76,7 @@ void put(char *name, char *defn) {
 				strcat(temp->defn, cache_tail->defn);
 				temp->file_op_type = 1;	//Writing to file
 				temp->sock_fd = -1;	//No clients to respond to
+				printf("Inserting %s %s to the cache\n", temp->name, temp->defn);
 
 				while((ret = write(request_pipe_fd[1], temp, sizeof(struct continuation))) <= 0)
 					printf("Trying to end data to pipe, write returns %d \n",ret);
@@ -110,14 +112,14 @@ void *io_thread_func() {
     if ((ret = read(request_pipe_fd[0], cont_req, sizeof(struct continuation))) > 0) {
 			printf("HT %ld: Received a request\n",pthread_self());
 	    if((myFile = fopen("names.txt", "rb+")) == NULL){
-				printf("Unable to open file\n");
+				printf("HT: Unable to open file\n");
 				exit(0);
 			}
 
 			char* line = malloc (MAX_KEY_VALUE_SIZE);
 			request_key		= cont_req->name;
 			request_value	= cont_req->defn;
-			printf("Working on %d %s request\n", cont_req->file_op_type, request_key);
+			printf("HT: Working on %d %s request\n", cont_req->file_op_type, request_key);
 
 			len = MAX_KEY_VALUE_SIZE;
 			rewind(myFile);
@@ -126,12 +128,13 @@ void *io_thread_func() {
 				while((retval = getline(&line, &len, myFile)) > 0){
 					token = strtok(line, " ");
 					if(strcmp(token, request_key) == 0){
-						printf("Key found in file!!\n");
+						printf("HT: Key found in file!!\n");
 						response_value = strtok(NULL, " ");
 						response_value = strtok(response_value, "\n");
-      			strcpy(cont_req->defn, response_value);
+						if(cont_req->request_type == GET)
+	      			strcpy(cont_req->defn, response_value);
 						cont_req->key_found = 1;
-						printf("Response for GET %s is %s\n",request_key, response_value);
+						printf("HT: Response for GET %s is %s\n",request_key, response_value);
 						break;
 					}
 				}
@@ -140,16 +143,16 @@ void *io_thread_func() {
 				while((retval = getline(&line, &len, myFile)) > 0){
 					token = strtok(line, " ");
 					if(strcmp(token, request_key) == 0){
-						printf("Key found in file!!\n");
+						printf("HT: Key found in file!!\n");
 						cont_req->key_found = 1;
 						strcpy(request, request_key);
-				printf("CHECKPOINT\n");
+						printf("HT: CHECKPOINT\n");
 						strcat(request, " ");
 						strcat(request, request_value);
-						printf("Writing %s to file\n", request);
+						printf("HT: Writing %s to file\n", request);
 						fseek(myFile, -retval, SEEK_CUR);
 						if(fputs(request, myFile)<=0)
-							printf("Error while writing to file\n");
+							printf("HT: Error while writing to file\n");
 						for (i = strlen(request); i < retval-2; i++) //cleaning up the old data
 							fputs(" ", myFile);
 						break;
@@ -158,7 +161,7 @@ void *io_thread_func() {
 			}
 
 			if(write(response_pipe_fd[1], cont_req, sizeof(struct continuation)) < 0)
-				printf("Write to pipe failed!\n");
+				printf("HT: Write to pipe failed!\n");
 
 			//TODO: Cleanup
       v = (union sigval*) malloc (sizeof(union sigval));
