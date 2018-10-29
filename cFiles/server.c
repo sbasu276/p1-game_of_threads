@@ -45,6 +45,7 @@ struct node* get (char *s) {
 }
 
 void put(char *name, char *defn) {
+	int ret;
   struct node *cache_entry;
   if ((cache_entry = get(name)) == NULL) {
     // value not in cache
@@ -75,8 +76,8 @@ void put(char *name, char *defn) {
 				temp->file_op_type = 1;	//Writing to file
 				temp->sock_fd = -1;	//No clients to respond to
 
-				if(write(request_pipe_fd[1], temp, sizeof(temp) == -1))
-					printf("Sending request through pipe failed!\n");
+				while((ret = write(request_pipe_fd[1], temp, sizeof(struct continuation))) <= 0)
+					printf("Trying to end data to pipe, write returns %d \n",ret);
 			}
       cache_tail = cache_tail->prev;
       cache_tail->next = NULL;
@@ -99,7 +100,8 @@ void *io_thread_func() {
 
 	int retval, written, i, ret;
 	size_t len;
-	char *token, *request_key, *request_value, *response_value, *request;
+	char *token, *request_key, *request_value, *response_value;
+	char request[1024];
 	FILE* myFile;
 	struct continuation req, *cont_req;
 
@@ -141,6 +143,7 @@ void *io_thread_func() {
 						printf("Key found in file!!\n");
 						cont_req->key_found = 1;
 						strcpy(request, request_key);
+				printf("CHECKPOINT\n");
 						strcat(request, " ");
 						strcat(request, request_value);
 						printf("Writing %s to file\n", request);
@@ -163,10 +166,10 @@ void *io_thread_func() {
       sigqueue(my_pid, SIGRTMIN+4, *v);
 			fclose(myFile);
     }
-		if (ret == -1)
-			printf("Pipe read returned an error = %s\n", strerror(errno));
-		else
-			printf("HT %ld: Didn't find anything to work on!\n", pthread_self());
+//		if (ret == -1)
+//			printf("Pipe read returned an error = %s\n", strerror(errno)); TODO: why -1?
+//		else
+//			printf("HT %ld: Didn't find anything to work on!\n", pthread_self());
 		sleep(1);
   }
 }
@@ -192,6 +195,7 @@ static void incoming_connection_handler(int sig, siginfo_t *si, void *data) {
 
 static void incoming_request_handler(int sig, siginfo_t *si, void *data) {
 	sock_event[si->si_fd] = 1;
+	printf("ISH: Setting the bit for fd %d\n",si->si_fd);
 }
 
 static void process_signal(int incoming) {
@@ -200,6 +204,7 @@ static void process_signal(int incoming) {
   char *temp_string;
   temp_string = (char *) malloc (1024 * sizeof(char));
 
+  memset(temp_string, 0, 1024);
 	printf("Processing signal from fd %d\n", incoming); 
 	valread = read(incoming , temp_string, 1024);
   if(valread > 0){
@@ -234,8 +239,8 @@ static void process_signal(int incoming) {
 				printf("Key missed in cache\n");
 	      // Not found in cache, issue request to I/O
 				temp->file_op_type = GET;
-				if(write(request_pipe_fd[1], temp, sizeof(struct continuation)) == -1)
-					printf("Sending request through pipe failed!\n");
+				while((ret = write(request_pipe_fd[1], temp, sizeof(struct continuation))) <= 0)
+					printf("Trying to end data to pipe, write returns %d \n",ret);
 			}
     } else if (temp->request_type == PUT) {
       temp_node = get(temp->name);
@@ -251,7 +256,6 @@ static void process_signal(int incoming) {
 				printf("Size of continuation structure = %ld\n", sizeof(struct continuation));
 				while((ret = write(request_pipe_fd[1], temp, sizeof(struct continuation))) <= 0)
 					printf("Trying to end data to pipe, write returns %d \n",ret);
-				printf("Number of bytes written %d\n", ret);
 			}
     }
 		free(temp);
@@ -313,7 +317,7 @@ int init_server_sock() {
 }
 
 void event_loop_scheduler() {
-	int i;
+	int i, ret;
 	struct continuation *resp, my_resp;
 	server_fd = init_server_sock();
 	resp = &my_resp;
@@ -327,27 +331,45 @@ void event_loop_scheduler() {
 				process_signal(i);
 			}
 			else{
-				//printf("No events!\n");
+//				printf("No event for fd %d!\n", i);
 			}
 		}
 
 		//Stage2: Processing the responses from threads
 		int num_resp = response_count;
+		response_count = 0;
+		//printf("Stage2: Number of responses received %d\n", num_resp);
 		for(i = 0; i < num_resp; i++){
-			if(read(response_pipe_fd[0], resp, sizeof(struct continuation)) > 0){
-				if(resp->request_type == GET){//Get Response
-					if(resp->key_found == 1){
-						put(resp->name, resp->defn);
-						send(resp->sock_fd, resp->defn, strlen(resp->defn), 0);
+			if((ret = read(response_pipe_fd[0], resp, sizeof(struct continuation))) > 0){
+				if(resp->file_op_type == 0){//Read operation
+					if(resp->request_type == GET){//GET Request
+						if(resp->key_found == 1){
+							put(resp->name, resp->defn);
+							send(resp->sock_fd, resp->defn, strlen(resp->defn), 0);
+						}
+						else{
+							send(resp->sock_fd, "-1", 2, 0);
+						}
 					}
-					else{
-						send(resp->sock_fd, "-1", 2, 0);
+					else{//PUT Request
+						if(resp->key_found == 1){
+							printf("Key found for  PUT operation\n");
+							send(resp->sock_fd, "ACK", 3, 0);
+							put(resp->name, resp->defn);							
+						}
+						else
+							send(resp->sock_fd, "-1", 2, 0);
 					}
 				}
-				else {	//PUT Response
-					send(resp->sock_fd, "ACK", 3, 0);
+				else {//Write Operation
+					printf("Op for fd %d completed\n", resp->sock_fd);
+					if(resp->sock_fd == -1)
+						printf("Write back of %s %s completed\n", resp->name, resp->defn);
+					else
+						send(resp->sock_fd, "ACK", 3, 0);
 				}
 			}
+			printf("Response pipe read return value %d\n", ret);
 		}
 		sleep(1);
   }
