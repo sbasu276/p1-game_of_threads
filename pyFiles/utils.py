@@ -6,9 +6,8 @@ class Request:
         self.fd = fd
 
 def parse_req(request):
-    print("UTIL ", request)
     req = request.strip('\n').split()
-    print(req)
+    #print(req[0])
     request = None
     if len(req)>2:
         request = Request(req[0], req[1], req[2])
@@ -40,14 +39,14 @@ def get(key, cache, persistent, lock):
         return "-1"
 
 def put(key, value, cache, persistent, lock):
-    #lock.acquire()
+    lock.acquire()
     retval = cache.put(key, value)
-    #lock.release()
+    lock.release()
     if retval is None:
         if persistent.put(key, value):
-            #lock.acquire()
+            lock.acquire()
             retkey, retval, _ = cache.insert(key, value, dirty=False)
-            #lock.release()
+            lock.release()
             if retkey and retval:
                 persistent.writeback(retkey, retval)
             return "ACK"

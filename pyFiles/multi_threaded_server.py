@@ -19,9 +19,6 @@ class MultiThreadedServer(object):
         self.persistent = Persistent(db_name)
         self.lock = threading.Lock()
 
-        self.interval = 10
-        self.start = 5
-    
     def run_server(self):
         self.sock.listen(5)
         tot_time = 0
@@ -35,12 +32,11 @@ class MultiThreadedServer(object):
                 if first:
                     tot_time = 0
                     first = False
-                log.append((tot_time, req))
-                if req >= 1000.0:
-                    with open('mts.log', 'ab') as f:
-                        pickle.dump(log, f)
-                    log = []
-                    req = 0
+                #log.append((tot_time, req))
+                if tot_time >= 1.0:
+                    with open('mts.log', 'a') as f:
+                        f.write(str(req)+" "+str(tot_time)+"\n")
+                        req = 0
                     tot_time = 0
 
             client_sock, address = self.sock.accept()
@@ -50,41 +46,27 @@ class MultiThreadedServer(object):
             req += 1
             #last = time.time()
             tot_time = tot_time + (time.time() - start) 
-
-
-
     
     def thread_handler(self, client_sock, address):
-        size = 1024
-        data = ""
-        print("in handler")
         while True:
-            transfer = client_sock.recv(size)
-            data = data + transfer.decode('utf-8')
-            if '\n' in transfer.decode('utf-8'):
-                break
-        req = parse_req(data)
-        resp = call_api(req, self.cache, self.persistent, self.lock)
-        client_sock.send(resp.encode('utf-8'))
-        self.cache.show()
-        client_sock.close()
-
-
-def handler(signum, frame):
-    print("SIGHANDLER")
-    with open('multi_threded_server_1.log', 'a') as f:
-        f.write(str(measure.requests)+"\n")
-    measure.requests = 0
+            size = 1024
+            data = ""
+            print("Current: ", threading.get_ident())
+            while True:
+                transfer = client_sock.recv(size)
+                data = data + transfer.decode('utf-8')
+                if '\n' in transfer.decode('utf-8'):
+                    break
+            req = parse_req(data)
+            resp = call_api(req, self.cache, self.persistent, self.lock)
+            client_sock.send(resp.encode('utf-8'))
+            #self.cache.show()
 
 if __name__ == "__main__":
     host = sys.argv[1]
     port = int(sys.argv[2])
     cache_size = int(sys.argv[3])
     db_name = sys.argv[4]
-    start = 0
-    interval = 1 
-    signal.setitimer(signal.ITIMER_REAL, start, interval)
-    signal.signal(signal.SIGALRM, handler)
     # No sanity check for input
     server = MultiThreadedServer(host, port, cache_size, db_name)
     server.run_server()

@@ -13,7 +13,7 @@ class PollingSocket:
 
     def accept_connection(self, sock):
         conn, addr = sock.accept()  # Should be ready to read
-        print('accepted connection from', addr)
+        #print('accepted connection from', addr)
         conn.setblocking(False)
         #TODO:change data to mutable key value pair
         data = types.SimpleNamespace(addr=addr, req=b'', resp=b'')
@@ -31,13 +31,13 @@ class PollingSocket:
             if recv_data: #TODO: recvall??
                 data.req += recv_data
                 if '\n' in data.req.decode():
-                    print("Received a request from :", data.addr, data.req)
+                    #print("Received a request from :", data.addr, data.req)
                     new_request = (sock, data.req)
                     data.req = b''
                 self.sock_data_map[sock] = data
 
             else:
-                print('closing connection to', data.addr)
+                #print('closing connection to', data.addr)
                 self.sel.unregister(sock)
                 sock.close()
                 new_request = None

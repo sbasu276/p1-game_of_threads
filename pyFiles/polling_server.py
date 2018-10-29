@@ -5,6 +5,9 @@ from queue import Queue
 from utils import Request, parse_req, add_response
 import sys
 from helper_threads import Thread, io_handler
+import time
+import pickle
+
 
 class PollingServer:
     def __init__(self, host, port, cache_size, db_name, workers):
@@ -33,7 +36,11 @@ class PollingServer:
     def issue_request(self, req):
         if req.key not in self.pending_reqs:
             self.req_queue.put(req, block=False)
-        self.pending_reqs.setdefault(req.key, []).append(req)
+            self.pending_reqs[req.key] = [req]
+        else:
+            pend = self.pending_reqs[req.key]
+            pend.append(req)
+            self.pending_reqs[req.key] = pend
 
     def get_responses(self):
         responses = []
@@ -43,7 +50,8 @@ class PollingServer:
                 del self.pending_reqs[response.key]
             else:
                 self.req_queue.put(self.pending_reqs[response.key][0], block=False)
-                new_pending = self.pending_reqs[response.key].pop(0)
+                new_pending = self.pending_reqs[response.key]
+                new_pending.pop(0)
                 self.pending_reqs[response.key] = new_pending
             responses.append(response)
             if self.resp_queue.empty()==True:
@@ -62,8 +70,24 @@ class PollingServer:
         self.polling = PollingSocket(self.host, self.port)
         self.init_helpers()
         self.run_helpers()
+        num_req = 0
+        first = True
+        tot_time = 0
+
         while True:
+            start = time.time()
             requests = self.polling.poll_connection()
+            num_req += len(requests)
+            if num_req:
+                if first:
+                    tot_time = 0
+                    first = False
+                if tot_time >= 1:
+                    with open('pls.lg', 'a') as f:
+                        f.write(str(num_req)+" "+str(tot_time)+"\n")
+                    num_req = 0
+                    tot_time = 0
+
             for request in requests:
                 #Request is a tuple of sock, request_data
                 data = request[1]
@@ -129,6 +153,7 @@ class PollingServer:
                 #self.cache.show()
             except:
                 pass
+            tot_time = tot_time + time.time() - start
 
 if __name__ == "__main__":
     host = sys.argv[1]
