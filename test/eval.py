@@ -77,12 +77,13 @@ with open(filename) as f:
     conf = json.load(f)
 host = conf['server']['ip']
 port = conf['server']['port']
-
+j = int(sys.argv[2])
 for i in range(1,len(conf['workloads'])):
-    outfile = 'out_%s'%(conf['workloads'][i]['id'])
-    req_streams, num_clients = make_request_streams(conf['workloads'][i])
+    outfile = 'out_%s'%(conf['workloads'][j]['id'])
+    req_streams, num_clients = make_request_streams(conf['workloads'][j])
     #create j-processes based on conf and stream[j] passed as arg
     pool_args = [[[host, port, outfile], stream] for stream in req_streams]
     with mp.Pool(num_clients) as pool:
         pool.map(run_client, pool_args)
     print("DONE")
+    break
