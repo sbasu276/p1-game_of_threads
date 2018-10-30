@@ -14,6 +14,24 @@ char *strdups(char *s) {/* make a duplicate of s */
     return p;
 }
 
+void deleteNode(struct node *del) 
+{ 
+  if(cache_head == NULL || del == NULL) 
+    return; 
+  
+  if(cache_head == del) 
+    cache_head = del->next; 
+  
+  if(del->next != NULL) 
+    del->next->prev = del->prev; 
+  
+  if(del->prev != NULL) 
+    del->prev->next = del->next;      
+  
+  free(del); 
+  return; 
+} 
+
 struct node* get (char *s) {
   curr = cache_head;
   while (curr != NULL) {
@@ -145,7 +163,7 @@ void *io_thread_func() {
 				if(cont_req->key_found == 0)
 					printf("HT: Key %s not found in file!!\n",request_key);
       }
-			else { //PUT Request - assuming a maximum key value pair size. else data will be overwritten
+			else if(cont_req->file_op_type == 1) { //PUT Request - assuming a maximum key value pair size. else data will be overwritten
 				while((retval = getline(&line, &len, myFile)) > 0){
 					token = strtok(line, " ");
 					if(strcmp(token, request_key) == 0){
@@ -169,6 +187,27 @@ void *io_thread_func() {
 				}
 				if(cont_req->key_found == 0)
 					printf("HT: Key %s not found in file!!\n",request_key);
+			}
+			else {//DELETE Operation
+				while((retval = getline(&line, &len, myFile)) > 0){
+					token = strtok(line, " ");
+					if(strcmp(token, request_key) == 0){
+						printf("HT: Key found in file for DELETE Operation\n");
+						cont_req->key_found = 1;
+						strcpy(request, "$");		//Appending the invalid keys with $ symbol to be removed later
+						strcat(request, request_key);
+						printf("HT: CHECKPOINT\n");
+						strcat(request, " ");
+						strcat(request, request_value);
+						printf("HT: Writing %s to file\n", request);
+						fseek(myFile, -retval, SEEK_CUR);
+						if(fputs(request, myFile)<=0)
+							printf("HT: Error while writing to file\n");
+						for (i = strlen(request); i < retval-2; i++) //cleaning up the old data
+							fputs(" ", myFile);
+						break;
+					}
+				}
 			}
 
 			if(write(response_pipe_fd[1], cont_req, sizeof(struct continuation)) < 0)
@@ -234,11 +273,19 @@ static void process_signal(int incoming) {
     if (strcmp(tokens, "GET") == 0) {
       temp->request_type = GET;
 			printf("received a GET request for key %s\n", temp->name);
-    } else {
+    } else if (strcmp(tokens, "PUT") == 0) {
       temp->request_type = PUT;
     	strcpy(temp->defn, strtok(NULL, " "));
 			printf("received a PUT request for key %s\n", temp->name);
-    }
+    } else if (strcmp(tokens, "INSERT") == 0) {
+      temp->request_type = INSERT;
+    } else if (strcmp(tokens, "DELETE") == 0) {
+      temp->request_type = DELETE;
+			printf("Delete request received");
+		} else{
+			printf("Unknown Message!!");
+			exit(0);
+		}
 
     // Servicing the request
     if (temp->request_type == GET) {
@@ -252,7 +299,7 @@ static void process_signal(int incoming) {
       } else {
 				printf("Key missed in cache\n");
 	      // Not found in cache, issue request to I/O
-				temp->file_op_type = GET;
+				temp->file_op_type = 0;
 				while((ret = write(request_pipe_fd[1], temp, sizeof(struct continuation))) <= 0)
 					printf("Trying to end data to pipe, write returns %d \n",ret);
 			}
@@ -266,12 +313,38 @@ static void process_signal(int incoming) {
 			}
 			else{
 				printf("Key missed in cache\n");
-				temp->file_op_type = GET;
+				temp->file_op_type = 0;
 				printf("Size of continuation structure = %ld\n", sizeof(struct continuation));
 				while((ret = write(request_pipe_fd[1], temp, sizeof(struct continuation))) <= 0)
 					printf("Trying to end data to pipe, write returns %d \n",ret);
 			}
-    }
+    } else if (temp->request_type == INSERT) {
+      temp_node = get(temp->name);
+      if (temp_node != NULL) {
+        // Key found in cache
+        printf("Key found in cache\n");
+        send(temp->sock_fd , "-1", strlen("-1") , 0);
+      } else {
+				printf("Key missed in cache\n");
+	      // Not found in cache, issue request to I/O
+				temp->file_op_type = 0;
+				while((ret = write(request_pipe_fd[1], temp, sizeof(struct continuation))) <= 0)
+					printf("Trying to end data to pipe, write returns %d \n",ret);
+			}
+    } else if (temp->request_type == DELETE) {
+      temp_node = get(temp->name);
+      if (temp_node != NULL) {
+        // Key found in cache
+        printf("Key found in cache\n");
+				deleteNode(temp_node);
+			}
+	    //Check if key exist in file
+			temp->file_op_type = 0;
+			while((ret = write(request_pipe_fd[1], temp, sizeof(struct continuation))) <= 0)
+				printf("Trying to end data to pipe, write returns %d \n",ret);
+			
+		}
+
 		free(temp);
 	}
 	else if(valread == 0){
@@ -365,7 +438,7 @@ void event_loop_scheduler() {
 							send(resp->sock_fd, "-1", 2, 0);
 						}
 					}
-					else{//PUT Request
+					else if(resp->request_type == PUT){//PUT Request
 						if(resp->key_found == 1){
 							printf("Key found for  PUT operation\n");
 							send(resp->sock_fd, "ACK", 3, 0);
@@ -373,6 +446,31 @@ void event_loop_scheduler() {
 						}
 						else
 							send(resp->sock_fd, "-1", 2, 0);
+					}
+					else if(resp->request_type == INSERT){//INSERT Request
+						if(resp->key_found == 1) { // Send -1 as exist in file
+							printf("Key already exist for INSERT operation\n");
+							send(resp->sock_fd, "-1", 2, 0);
+						}
+						else {//Since key doesn't exist, add it to the cache
+							put(resp->name, resp->defn);
+						}						
+					}
+					else if(resp->request_type == DELETE){//DELETE Request
+						if(resp->key_found == 0) { // Send ACK as doesn't exist in file
+							printf("Key doesn't exist in file for DELETE operation\n");
+						}
+						else {//If Key exists in file
+							resp->request_type = PUT;
+							resp->file_op_type = 3;
+							while((ret = write(request_pipe_fd[1], resp, sizeof(struct continuation))) <= 0)
+								printf("Trying to end data to pipe, write returns %d \n",ret);
+						}		
+						send(resp->sock_fd, "ACK", 3, 0);
+					}
+					else{
+						printf("Unknown Operation!!!\n");
+						exit(0);
 					}
 				}
 				else {//Write Operation
