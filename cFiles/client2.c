@@ -8,7 +8,8 @@
 #include <pthread.h>
 #define PORT 8080
 
-char *hello[] = {"PUT Aman Jain"};
+char *hello[] = {"PUT Aman Jain\n"};
+//char *hello[] = {"GET Rafael\n"};
 struct sockaddr_in *serv_addr;
 
 void *client_func() {
@@ -28,6 +29,7 @@ void *client_func() {
       exit(0);
   }
 
+	sleep(2);
   send(sock , hello[0] , strlen(hello[0]) , 0 );
   printf("REQUEST SENT: %s\n", hello[0]);
   valread = read( sock , buffer, 1024);

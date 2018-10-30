@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import socket, selectors, types
+import socket, asyncio, types
 
 class SignallingSocket:
 
@@ -9,11 +9,12 @@ class SignallingSocket:
     sock.bind((host, port))
     sock.listen()
     sock.setblocking(False)
-    data = types.SimpleNamespace(addr=addr, req=b'', resp=b'')
-		new_request_list = []
+    loop = asyncio.get_event_loop()
+    
 
   def accept_connection(self, sock):
     conn, addr = sock.accept()  # Should be ready to read
+    data = types.SimpleNamespace(addr=addr, req=b'', resp=b'')
     print('accepted connection from', addr)
     conn.setblocking(False)
 
