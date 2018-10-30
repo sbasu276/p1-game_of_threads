@@ -26,7 +26,7 @@
 
 #define CACHE_SIZE 2
 #define THREAD_POOL_SIZE 2
-#define MAX_CLIENTS 100
+#define MAX_CLIENTS 1000
 #define MAX_KEY_VALUE_SIZE 512
 
 /* When a SIGUSR1 signal arrives, set this variable. */

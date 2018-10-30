@@ -76,14 +76,14 @@ void put(char *name, char *defn) {
 				strcat(temp->defn, cache_tail->defn);
 				temp->file_op_type = 1;	//Writing to file
 				temp->sock_fd = -1;	//No clients to respond to
-				printf("Inserting %s %s to the cache\n", temp->name, temp->defn);
-
+				printf("Writing %s %s to the file\n", temp->name, temp->defn);
 				while((ret = write(request_pipe_fd[1], temp, sizeof(struct continuation))) <= 0)
 					printf("Trying to end data to pipe, write returns %d \n",ret);
+				free(temp);
 			}
       cache_tail = cache_tail->prev;
+			free(cache_tail->next);
       cache_tail->next = NULL;
-      //TODO: Free the memory as you evict nodes
     } else {
       // Increase the count
       global_cache_count++;
@@ -174,13 +174,13 @@ void *io_thread_func() {
 			if(write(response_pipe_fd[1], cont_req, sizeof(struct continuation)) < 0)
 				printf("HT: Write to pipe failed!\n");
 
-			//TODO: Cleanup
+			//TODO: Cleanup?
       v = (union sigval*) malloc (sizeof(union sigval));
       v->sival_ptr = NULL;
       sigqueue(my_pid, SIGRTMIN+4, *v);
     }
 //		if (ret == -1)
-//			printf("Pipe read returned an error = %s\n", strerror(errno)); TODO: why -1?
+//			printf("Pipe read returned an error = %s\n", strerror(errno));
 //		else
 //			printf("HT %ld: Didn't find anything to work on!\n", pthread_self());
 		sleep(1);
