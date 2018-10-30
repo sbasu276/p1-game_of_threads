@@ -22,45 +22,45 @@ class MultiThreadedServer(object):
     def run_server(self):
         self.sock.listen(5)
         tot_time = 0
-        req = 0
+        reqs = 0
         first = True
         log = []
         while True:
 
             start = time.time()
-            if req:
+            if reqs:
                 if first:
                     tot_time = 0
                     first = False
-                #log.append((tot_time, req))
                 if tot_time >= 1.0:
-                    with open('mts.log', 'a') as f:
-                        f.write(str(req)+" "+str(tot_time)+"\n")
-                        req = 0
+                    print(tot_time, ",", reqs)
+                    #with open('mts.lg', 'a') as f:
+                    #    f.write(str(req)+" "+str(tot_time)+"\n")
+                    reqs = 0
                     tot_time = 0
 
             client_sock, address = self.sock.accept()
             pthread = threading.Thread(target = self.thread_handler, \
                                        args = (client_sock,address))
             pthread.start()
-            req += 1
+            reqs += 1
             #last = time.time()
             tot_time = tot_time + (time.time() - start) 
     
     def thread_handler(self, client_sock, address):
+        size = 1024
+        data = ""
+        #print("Current: ", threading.get_ident())
         while True:
-            size = 1024
-            data = ""
-            print("Current: ", threading.get_ident())
-            while True:
-                transfer = client_sock.recv(size)
-                data = data + transfer.decode('utf-8')
-                if '\n' in transfer.decode('utf-8'):
-                    break
-            req = parse_req(data)
-            resp = call_api(req, self.cache, self.persistent, self.lock)
-            client_sock.send(resp.encode('utf-8'))
-            #self.cache.show()
+            transfer = client_sock.recv(size)
+            data = data + transfer.decode('utf-8')
+            if '\n' in transfer.decode('utf-8'):
+                break
+        req = parse_req(data)
+        resp = call_api(req, self.cache, self.persistent, self.lock)
+        client_sock.send(resp.encode('utf-8'))
+        #self.cache.show()
+        client_sock.close()
 
 if __name__ == "__main__":
     host = sys.argv[1]

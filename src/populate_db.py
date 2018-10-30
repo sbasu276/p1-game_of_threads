@@ -23,7 +23,7 @@ def main(num, size, db):
         db_set(key, val)
         keys_append(key)
     db.dump()
-    with open('../data/keys_%s.txt'%num, 'w') as f:
+    with open('../data/k_%s.txt'%size, 'w') as f:
         for key in keys:
             f.write(key+'\n')
 

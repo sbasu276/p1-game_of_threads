@@ -1,6 +1,6 @@
 import json
 import sys
-import multiprocessing.dummy as mp
+import multiprocessing as mp
 import os
 import time
 import math
@@ -10,25 +10,6 @@ import string
 import subprocess
 import threading
 from client import Client
-
-#Note: This run_client() has been influenced by the code of Soumen's research project
-def run_client(config):
-    host = config[0][0]
-    port = config[0][1]
-    fname = config[0][2]
-    print(fname)
-    stream = config[1]
-    for msg in stream:
-        req_type = msg.split()[0]
-        c = Client(host, port)
-        start = time.time()
-        c.send_data(msg.encode('utf-8'))
-        latency = time.time() - start
-        c.sock.close()
-        with open(fname, 'a') as f:
-            f.write(req_type+' '+str(latency)+'\n')
-        print("In handler")
-        sleep(0.5)
 
 def rand_val(size):
     return ''.join(random.choices(string.ascii_lowercase+string.digits, k=size))
@@ -75,15 +56,11 @@ def make_request_streams(rr, rw, size, keys, rem_keys):
         streams.append(stream)
     return streams, num_clients
 
-
-import sys
-host = sys.argv[1]
-port = int(sys.argv[2])
 size = [100, 1000, 10000]
 rates = [60, 300, 600]
 ratio = [0.9, 0.5, 0.1]
 keysf = ['../data/k_50.txt', '../data/k_500.txt', '../data/k_5000.txt']
-p = ['mt']#, 'ep']
+p = ['mt', 'ep']
 for pr in p:
     for s in size:
         keys, rem_keys = get_keys(keysf[size.index(s)])
@@ -92,7 +69,6 @@ for pr in p:
                 out = '../data/tbs/%s_%s_%s_%s'%(pr, rw, rate, s)
                 out_f = '../data/res/%s_%s_%s_%s'%(pr, rw, rate, s)
                 streams, n = make_request_streams(rate, rw, s, keys, rem_keys)
-                p_args = [[[host, port, out_f], stream] for stream in streams] 
-                with mp.Pool(n) as pool:
-                    pool.map(run_client, p_args)			
+                p_args = [[[h, p, out_f], stream] for stream in streams] 
+                pool()
                 print("DONE %s"%out)

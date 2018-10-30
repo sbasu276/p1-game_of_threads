@@ -70,23 +70,24 @@ class PollingServer:
         self.polling = PollingSocket(self.host, self.port)
         self.init_helpers()
         self.run_helpers()
-        num_req = 0
-        first = True
-        tot_time = 0
+        #num_req = 0
+        #first = True
+        #tot_time = 0
 
         while True:
-            start = time.time()
             requests = self.polling.poll_connection()
-            num_req += len(requests)
-            if num_req:
-                if first:
-                    tot_time = 0
-                    first = False
-                if tot_time >= 1:
-                    with open('pls.lg', 'a') as f:
-                        f.write(str(num_req)+" "+str(tot_time)+"\n")
-                    num_req = 0
-                    tot_time = 0
+            #start = time.time()
+            #num_req += len(requests)
+            #if num_req:
+            #    if first:
+            #        tot_time = 0
+            #        first = False
+            #    if tot_time >= 1:
+            #        with open('ep.lg', 'a') as f:
+            #            f.write(str(num_req)+" "+str(tot_time)+"\n")
+            #        #print(str(num_req)+" "+str(tot_time)+"\n")
+            #        num_req = 0
+            #        tot_time = 0
 
             for request in requests:
                 #Request is a tuple of sock, request_data
@@ -153,7 +154,7 @@ class PollingServer:
                 #self.cache.show()
             except:
                 pass
-            tot_time = tot_time + time.time() - start
+            #tot_time = tot_time + time.time() - start
 
 if __name__ == "__main__":
     host = sys.argv[1]

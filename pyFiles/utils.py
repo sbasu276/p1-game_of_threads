@@ -24,7 +24,6 @@ def add_response(mapper, sock, response):
 def get(key, cache, persistent, lock):
     #lock.acquire()
     val = cache.get(key)
-    #lock.release()
     if val is None:
         val = persistent.get(key)
         if val:
@@ -33,43 +32,46 @@ def get(key, cache, persistent, lock):
             #lock.release()
             if retkey and retval:
                 persistent.writeback(retkey, retval)
+    #lock.release()
     if val:
         return val
     else:
         return "-1"
 
 def put(key, value, cache, persistent, lock):
-    lock.acquire()
+    #lock.acquire()
     retval = cache.put(key, value)
-    lock.release()
+    #lock.release()
     if retval is None:
         if persistent.put(key, value):
-            lock.acquire()
+            #lock.acquire()
             retkey, retval, _ = cache.insert(key, value, dirty=False)
-            lock.release()
             if retkey and retval:
                 persistent.writeback(retkey, retval)
+            #lock.release()
             return "ACK"
         else:
-
+            #lock.release()
             return "-1"
+    #lock.release()
     return "ACK"
 
 def insert(key, value, cache, persistent, lock):
+    #lock.acquire()
     if persistent.insert(key, value):
-        lock.acquire()
         retkey, retval, _ = cache.insert(key, value)
-        lock.release()
         if retkey and retval:
             persistent.writeback(retkey, retval)
+        #lock.release()
         return "ACK"
+    #lock.release()
     return "-1"
 
 def delete(key, cache, persistent, lock):
+    #lock.acquire()
     pdel = persistent.delete(key)
-    lock.acquire()
     cdel = cache.delete(key)
-    lock.release()
+    #lock.release()
     if pdel is False and cdel is False:
         return "-1"
     return "ACK"

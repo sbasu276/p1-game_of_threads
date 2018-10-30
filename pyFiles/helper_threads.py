@@ -39,7 +39,7 @@ def io_handler(req_queue, resp_queue, persistent):
                     event.value = "-1"
             elif event.op == 'WRITEBACK':
                 #Internal operation. Not exposed.
-                print("WRITE BACK KEY: ", event.key, " VAL: ", event.value)
+                #print("WRITE BACK KEY: ", event.key, " VAL: ", event.value)
                 persistent.writeback(event.key, event.value)
             else:
                 pass
