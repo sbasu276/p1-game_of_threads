@@ -138,7 +138,12 @@ void *io_thread_func() {
 						printf("HT: Response for GET %s is %s\n",request_key, response_value);
 						break;
 					}
+					else{
+						cont_req->key_found = 0;
+					}
 				}
+				if(cont_req->key_found == 0)
+					printf("HT: Key %s not found in file!!\n",request_key);
       }
 			else { //PUT Request - assuming a maximum key value pair size. else data will be overwritten
 				while((retval = getline(&line, &len, myFile)) > 0){
@@ -158,7 +163,12 @@ void *io_thread_func() {
 							fputs(" ", myFile);
 						break;
 					}
+					else{
+						cont_req->key_found = 0;
+					}
 				}
+				if(cont_req->key_found == 0)
+					printf("HT: Key %s not found in file!!\n",request_key);
 			}
 
 			if(write(response_pipe_fd[1], cont_req, sizeof(struct continuation)) < 0)

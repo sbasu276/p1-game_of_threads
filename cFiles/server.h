@@ -26,7 +26,7 @@
 
 #define CACHE_SIZE 2
 #define THREAD_POOL_SIZE 2
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 100
 #define MAX_KEY_VALUE_SIZE 512
 
 /* When a SIGUSR1 signal arrives, set this variable. */
@@ -35,8 +35,8 @@ volatile sig_atomic_t usr_interrupt = 0;
 int request_pipe_fd[2];
 int response_pipe_fd[2];
 
-bool sock_event[MAX_CLIENTS+3];
-int response_count = 0;
+volatile sig_atomic_t sock_event[MAX_CLIENTS+3];
+volatile sig_atomic_t response_count = 0;
 
 enum req_type {GET = 0, PUT = 1, INSERT = 2, DELETE = 3};
 enum state {Clean = 0, Dirty = 1};
