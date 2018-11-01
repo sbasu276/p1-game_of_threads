@@ -1,0 +1,27 @@
+Design 3 was implemented in C as python doesn't expose the 'signinfo_t' data structure
+used in signalling apis to identify the fd of the source of the signal. The code was
+developed on the initial setup provided to us and was in debug mode till the last
+minute. The master branch contains buggy implementations of insert/delete operations
+which are not for working for all the test cases. However get/put operations are working
+fine and tested extensively for upto 100 clients issuing requests concurrently. For
+evaluation of third design alone, I request you to checkout to the commit point which has
+only the tested get/put implementation.
+
+'git checkout 27ba9df' will take you to the right commit point.
+
+To highlight some of the design choices made in design 3,
+- A client issues only one request at a time.
+- All Key-Value pairs are of constant size in the database, as set in the server.h file.
+Writing a key-value pair greated than this size would result in undefined state of the
+database.
+- The main thread is intimated of an incoming message from both the directions i.e. client
+sockets and helper threads, using signals. The signal handlers update a set of volatile
+variables which will later be consumed by the main thread and process the messages.
+- The ownership of the cache is only with the main thread i.e. all cache updations go though
+main thread. This avoids the need to employ locks/semaphores to serialise access to cache.
+- Cache follows write-back and allocate on write policy
+- Some guarantees are provided by the server for the clients to ensure consistency. If a
+put is acknowledged, then that marks the completion of the operation and subsequents reads
+will return the new value. However, two concurrent writes will result in an inconsistent
+state.
+- All the file operations (fgets, fputs, etc.) are assumed to be atomic in nature. 
